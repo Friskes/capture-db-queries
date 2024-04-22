@@ -36,7 +36,7 @@ capture_db_queries `capture_queries` it can call the body of the decorated funct
 Direct usage
 
 ```python
-from capture_db_queries.decoratos import capture_queries
+from capture_db_queries.decorators import capture_queries
 
 
 @capture_queries(number_runs=2, advanced_verb=True)
