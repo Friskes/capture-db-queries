@@ -1,11 +1,20 @@
+from __future__ import annotations
+
 import functools
 import statistics
 import time
+from typing import TYPE_CHECKING, Any
 from unittest.util import safe_repr
 
 from django.core.signals import request_started
 from django.db import connection, reset_queries
 from django.test.utils import CaptureQueriesContext
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from types import TracebackType
+
+    from capture_db_queries.types import DecoratedCallable, T
 
 __all__ = ('capture_queries', 'ExtCaptureQueriesContext')
 
@@ -13,10 +22,10 @@ __all__ = ('capture_queries', 'ExtCaptureQueriesContext')
 def capture_queries(
     assert_q_count: int | None = None,
     number_runs: int = 1,
-    verbose=True,
-    advanced_verb=False,
-    queries=False,
-):
+    verbose: bool = True,
+    advanced_verb: bool = False,
+    queries: bool = False,
+) -> Callable[[DecoratedCallable], None]:
     """
     Замеряет количество запросов к бд внутри тела тестовой функции,
     выводит подробную информацию о замерах,
@@ -48,11 +57,11 @@ def capture_queries(
     Median time one test is: Среднее время выполнения одного тестового замера
     """  # noqa: E501
 
-    def _wrapper(func):
+    def _wrapper(func: DecoratedCallable) -> None:
         """"""
 
         @functools.wraps(func)
-        def spoof_func(*args, **kwargs):
+        def spoof_func(*args: Any, **kwargs: Any) -> Any:
             """"""
             force_debug_cursor = connection.force_debug_cursor
             connection.force_debug_cursor = True
@@ -107,7 +116,7 @@ def capture_queries(
 
             return return_value
 
-        return spoof_func()  # автовызов декорируемой функции
+        spoof_func()  # автовызов декорируемой функции
 
     return _wrapper
 
@@ -134,18 +143,25 @@ class ExtCaptureQueriesContext(CaptureQueriesContext):
     Execution time: Время выполнения запросов к БД внутри контекстного менеджера
     """
 
-    def __init__(self, assert_q_count: int | None = None, verbose=True, queries=False):
+    def __init__(
+        self, assert_q_count: int | None = None, verbose: bool = True, queries: bool = False
+    ) -> None:
         super().__init__(connection)
 
         self.assert_q_count = assert_q_count
         self.verbose = verbose
         self.queries = queries
 
-    def __enter__(self):
+    def __enter__(self: T) -> T:
         self.start = time.perf_counter()
         return super().__enter__()
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         super().__exit__(exc_type, exc_value, traceback)
 
         end = time.perf_counter()
