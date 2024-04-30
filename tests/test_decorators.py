@@ -11,7 +11,7 @@ from tests.models import Article, Reporter
 # pytest -s -v ./tests
 @pytest.mark.django_db(transaction=True)
 def test_capture_queries(intercept_output: StringIO) -> None:
-    """"""
+    """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
 
     @capture_queries(assert_q_count=200, number_runs=100)
     def _() -> None:
@@ -31,7 +31,7 @@ def test_capture_queries(intercept_output: StringIO) -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_ext_capture_queries_context(intercept_output: StringIO) -> None:
-    """"""
+    """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
 
     with ExtCaptureQueriesContext() as ctx:
         reporter = Reporter.objects.create(full_name='full_name')
