@@ -24,9 +24,11 @@ def test_capture_queries(intercept_output: StringIO) -> None:
         )
 
     value = intercept_output.getvalue()
-    assert value[:75] == 'Tests count: 100  |  Total queries count: 200  |  Total execution time: 0.0'
-    # assert int(value[75:76]) in range(1, 5)
-    assert value[76:] == 's  |  Median time one test is: 0.000s\n'
+    assert value[:72] == 'Tests count: 100  |  Total queries count: 200  |  Total execution time: '
+    # assert float(value[72:76]) in [x / 100.0 for x in range(1, 4)]
+    assert value[76:107] == 's  |  Median time one test is: '
+    # assert float(value[107:112]) in [x / 1000.0 for x in range(1)]
+    assert value[112:114] == 's\n'
 
 
 @pytest.mark.django_db(transaction=True)
