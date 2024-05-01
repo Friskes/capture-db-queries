@@ -61,7 +61,7 @@ def capture_queries(
         """"""
 
         @functools.wraps(func)
-        def spoof_func(*args: Any, **kwargs: Any) -> Any:
+        def spoof_func(*args: Any, **kwargs: Any) -> None:
             """"""
             force_debug_cursor = connection.force_debug_cursor
             connection.force_debug_cursor = True
