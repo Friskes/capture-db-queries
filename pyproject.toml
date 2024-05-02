@@ -58,9 +58,9 @@ ci = [
 
 
 [project.urls]
-"Repository" = "https://github.com/Friskes/capture-db-queries"
-"Changelog" = "https://github.com/Friskes/capture-db-queries/releases/"
-"Bug Reports" = "https://github.com/Friskes/capture-db-queries/issues"
+Homepage = "https://github.com/Friskes/capture-db-queries"
+Changelog = "https://github.com/Friskes/capture-db-queries/releases/"
+Issues = "https://github.com/Friskes/capture-db-queries/issues"
 
 
 [build-system]
