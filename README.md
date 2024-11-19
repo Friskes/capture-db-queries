@@ -1,4 +1,4 @@
-# Decorator for measuring the time and number of database queries
+# Class that supports the function of decorator, iterator and context manager for measuring the time and number of database queries
 
 <div align="center">
 
@@ -11,7 +11,7 @@
 
 </div>
 
-> Provides a decorator for measuring the time and number of database queries
+> Class that supports the function of decorator, iterator and context manager for measuring the time and number of database queries
 
 ## Install
 1. Install package
@@ -20,45 +20,39 @@
     ```
 
 ## About decorator
-`capture_queries` decorator it can call the body of the decorated function the specified number of times for multiple measurements, it can validate the total number of queries.
+`CaptureQueries` class as decorator can call the body of the decorated function or class as iterator can run code inside for loop the specified number of times for multiple measurements, it can validate the total number of queries.
+The functionality of the classic context manager is also available.
 
 - Optional parameters:
     - `assert_q_count`: The expected number of database requests is otherwise "AssertionError: N not less than or equal to N queries"
     - `number_runs`: The number of runs of the test function `_`
     - `verbose`: Displaying the final results of the test measurements
     - `advanced_verb`: Displaying the result of each test measurement
-    - `queries`: Displaying raw SQL queries to the database
-
-## About context manager
-`ExtCaptureQueriesContext`
-
-- Optional parameters:
-    - `assert_q_count`: The expected number of database requests is otherwise "AssertionError: N not less than or equal to N queries"
-    - `verbose`: Displaying the final results of the test measurements
+    - `auto_call_func`: Autorun of the decorated function (without arguments)
     - `queries`: Displaying raw SQL queries to the database
 
 
-## Usage example
+## Usage examples
 
 ```python
-from capture_db_queries.decorators import capture_queries
+from capture_db_queries.decorators import CaptureQueries
 
+for ctx in CaptureQueries(number_runs=2, advanced_verb=True):
+    response = self.client.get(url)
 
-@capture_queries(number_runs=2, advanced_verb=True)
-def _():
+# OR
+
+@CaptureQueries(number_runs=2, advanced_verb=True)
+def test_request():
+    response = self.client.get(url)
+
+# OR
+
+# NOTE: The with context manager does not support multi-launch number_runs > 1
+with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
     response = self.client.get(url)
 
 >>> Test №1 | Queries count: 10 | Execution time: 0.04s
 >>> Test №2 | Queries count: 10 | Execution time: 0.04s
->>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s
-```
-
-```python
-from capture_db_queries.decorators import ExtCaptureQueriesContext
-
-
-with ExtCaptureQueriesContext():
-    response = self.client.get(url)
-
->>> Queries count: 164  |  Execution time: 0.923s
+>>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
 ```
