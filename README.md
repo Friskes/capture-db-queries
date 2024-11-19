@@ -30,7 +30,7 @@ The functionality of the classic context manager is also available.
     - `advanced_verb`: Displaying the result of each test measurement
     - `auto_call_func`: Autorun of the decorated function (without arguments)
     - `queries`: Displaying raw SQL queries to the database
-
+    - `connection`: Connecting to your database, by default: django.db.connection
 
 ## Usage examples
 
