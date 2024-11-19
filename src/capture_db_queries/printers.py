@@ -33,13 +33,11 @@ class AbcPrinter(abc.ABC):
     def assert_msg(self, final_queries: int) -> str:
         raise NotImplementedError
 
-    @property
     @abc.abstractmethod
-    def beautiful_sql(self) -> str:
+    def beautiful_sql(self, captured_queries: list[dict[str, str]]) -> str:
         raise NotImplementedError
 
 
-# TODO: мб каких то дандер методов подкинуть в принтер для удобства чего либо
 class PrinterSql(AbcPrinter):
     EXCLUDE = ('BEGIN', 'COMMIT', 'ROLLBACK')
 
@@ -82,7 +80,7 @@ class PrinterSql(AbcPrinter):
     def _print_sql(self, template: str, **format_kwargs: Any) -> str:
         sql = ''
         if self.queries:
-            print(self.beautiful_sql)
+            print(self.beautiful_sql(format_kwargs['captured_queries']))
 
         if self.verbose:
             sql = template.format(**format_kwargs, vendor=self.vendor)
@@ -90,13 +88,11 @@ class PrinterSql(AbcPrinter):
         return sql
 
     def print_single_sql(self, dto: SinglePrintDTO) -> str:
-        self.dto = dto
         return self._print_sql(
             self.single_sql_template, final_queries=dto.final_queries, execution_time=dto.execution_time
         )
 
     def print_several_sql(self, dto: SeveralPrintDTO) -> str:
-        self.dto = dto  # type: ignore[assignment]
         format_kwargs: dict[str, str | int | float] = {
             'final_queries': dto.final_queries,
             'current_iteration': dto.current_iteration,
@@ -111,7 +107,6 @@ class PrinterSql(AbcPrinter):
         return self._print_sql(self.several_sql_template, **format_kwargs)
 
     def iteration_print(self, dto: IterationPrintDTO) -> None:
-        self.dto = dto  # type: ignore[assignment]
         if self.advanced_verb:
             print(
                 self.iteration_sql_template.format(
@@ -126,14 +121,11 @@ class PrinterSql(AbcPrinter):
             final_queries=safe_repr(final_queries), assert_q_count=safe_repr(self.assert_q_count)
         )
 
-    @property
-    def beautiful_sql(self) -> str:
+    def beautiful_sql(self, captured_queries: list[dict[str, str]]) -> str:
         if _EXCLUDE:
-            filtered_queries = [
-                q for q in self.dto.captured_queries if q['sql'].upper() not in self.EXCLUDE
-            ]
+            filtered_queries = [q for q in captured_queries if q['sql'].upper() not in self.EXCLUDE]
         else:
-            filtered_queries = self.dto.captured_queries
+            filtered_queries = captured_queries
 
         # sqlparse.formatter.validate_options  # подсказка
         formatted_queries = [
@@ -153,7 +145,7 @@ class PrinterSql(AbcPrinter):
             for ordinal_num, query in enumerate(formatted_queries, start=1)
         )
         return self.captured_queries_template.format(
-            captured_queries_count=len(self.dto.captured_queries),
+            captured_queries_count=len(captured_queries),
             vendor=self.vendor,
             assert_q_count=self.assert_q_count,
             sql=sql,
