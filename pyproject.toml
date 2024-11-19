@@ -32,6 +32,7 @@ classifiers = [
 # pip install .
 dependencies = [
     "django>=4.2.11",
+    "sqlparse==0.4.2",
 ]
 
 
@@ -186,8 +187,8 @@ extend-select = [
 ]
 ignore = [
     # https://docs.astral.sh/ruff/rules/#pyflakes-f
-    "F401",    # (не ругаться на неиспользуемые импорты)
-    "F841",    # (не ругаться на неиспользуемые переменные)
+    # "F401",    # (не ругаться на неиспользуемые импорты)
+    # "F841",    # (не ругаться на неиспользуемые переменные)
     "F403",    # (не ругаться на использование from ... import *)
     # https://docs.astral.sh/ruff/rules/#pyupgrade-up
     "UP031",   # (не ругаться на форматирование с помощью %s)
