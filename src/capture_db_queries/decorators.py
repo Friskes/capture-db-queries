@@ -96,8 +96,8 @@ class AbcCapture(abc.ABC):
 
         if self.number_runs > 1:
             warnings.warn(
-                f'При использовании: {type(self).__name__} как контекстного менеджера'
-                'параметр number_runs > 1 не используеться.',
+                f'При использовании: {type(self).__name__} как контекстного менеджера,'
+                ' параметр number_runs > 1 не используеться.',
                 category=FutureWarning,
                 stacklevel=2,
             )
