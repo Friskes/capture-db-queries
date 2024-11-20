@@ -25,7 +25,7 @@ The functionality of the classic context manager is also available.
 
 - Optional parameters:
     - `assert_q_count`: The expected number of database requests is otherwise "AssertionError: N not less than or equal to N queries"
-    - `number_runs`: The number of runs of the test function `_`
+    - `number_runs`: The number of runs of the test function / test for loop
     - `verbose`: Displaying the final results of the test measurements
     - `advanced_verb`: Displaying the result of each test measurement
     - `auto_call_func`: Autorun of the decorated function (without arguments)

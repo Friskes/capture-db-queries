@@ -94,6 +94,13 @@ class AbcCapture(abc.ABC):
         if self.debug:
             print('__enter__')
 
+        if self.number_runs > 1:
+            warnings.warn(
+                f'При использовании: {type(self).__name__} как контекстного менеджера'
+                'параметр number_runs > 1 не используеться.',
+                category=FutureWarning,
+                stacklevel=2,
+            )
         self.start = time.perf_counter()
         self._enter()
         return self
@@ -223,7 +230,7 @@ class CaptureQueries(AbcCapture):
 
     - assert_q_count: Ожидаемое количество запросов к БД иначе
      "AssertionError: N not less than or equal to N queries"
-    - number_runs: Количество запусков тестовой функции `_`
+    - number_runs: Количество запусков тестовой функции / тестового цикла
     - verbose: Отображение финальных результатов тестовых замеров
     - advanced_verb: Отображение результа каждого тестового замера
     - auto_call_func: Автозапуск декорируемой функции (без аргументов)
