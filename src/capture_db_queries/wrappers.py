@@ -153,6 +153,6 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         output_formatter = json.dumps if format_ and format_.lower() == 'json' else str
         for row in nested_result[0]:
             if not isinstance(row, str):
-                yield ' '.join(output_formatter(c) for c in row)  # type: ignore[operator]
+                yield ' '.join(output_formatter(c) for c in row)
             else:
                 yield row
