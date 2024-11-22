@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .types import QueriesLog
 
 
 @dataclass(frozen=True)
 class BasePrintDTO:
-    final_queries: int
-    captured_queries: list[dict[str, str]]
+    queries_count: int
+    queries_log: QueriesLog
 
 
 @dataclass(frozen=True)
 class SinglePrintDTO(BasePrintDTO):
-    _execution_time: float
-
-    @property
-    def execution_time(self) -> str:
-        return f'{self._execution_time:.3f}'
+    execution_time_per_iter: float
 
 
 @dataclass(frozen=True)
@@ -25,20 +25,16 @@ class SeveralPrintDTO(BasePrintDTO):
     all_execution_times: list[float]
 
     @property
-    def sum_all_execution_times(self) -> str:
-        return f'{sum(self.all_execution_times):.2f}'
+    def sum_all_execution_times(self) -> float:
+        return sum(self.all_execution_times)
 
     @property
-    def median_all_execution_times(self) -> str:
-        return f'{statistics.median(self.all_execution_times):.3f}'
+    def median_all_execution_times(self) -> float:
+        return statistics.median(self.all_execution_times)
 
 
 @dataclass(frozen=True)
 class IterationPrintDTO:
     current_iteration: int
-    queries_count: int
-    _execution_time: float
-
-    @property
-    def execution_time(self) -> str:
-        return f'{self._execution_time:.2f}'
+    queries_count_per_iter: int
+    execution_time_per_iter: float

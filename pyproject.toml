@@ -106,6 +106,13 @@ disallow_subclassing_any = false  # [misc]
 disallow_untyped_calls = false  # [no-untyped-call]
 # Не ругаться на return -> Any
 warn_return_any = false  # [no-any-return]
+# Не ругаться на определение функций без аннотаций типов или с неполными аннотациями типов
+# disallow_untyped_defs = false
+# Игнор ряда кодов, глобально по проекту
+disable_error_code = [
+    "operator",
+    "assignment",
+]
 
 
 [tool.coverage.run]
@@ -122,7 +129,7 @@ fail_under = 80  # Тест упадёт если покрытие состав�
 # https://docs.astral.sh/ruff/configuration/#full-command-line-interface
 # cmd: ruff format  # Отформатирует все файлы в `.` текущем каталоге.
 [tool.ruff]
-required-version = "==0.4.1"
+required-version = "<=0.5.7"
 target-version = "py312"  # Версия python которую будет обслуживать ruff
 line-length = 105  # Макс длина строки кода после которой будет выполнен автоперенос
 indent-width = 4
@@ -211,6 +218,8 @@ ignore = [
     "SLF001",  # (не ругаться на приватные названия объектов)
     # https://docs.astral.sh/ruff/rules/#flake8-simplify-sim
     "SIM105",  # (не ругаться на использование try except pass блока)
+    # https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp/
+    "SIM108",  # (не ругаться на использование классического if-else блока вместо тернарного)
     # https://docs.astral.sh/ruff/rules/#flake8-return-ret
     "RET503",  # (не ругаться на отсутствие return None в конце функций)
     # https://docs.astral.sh/ruff/rules/#flake8-blind-except-ble

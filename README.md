@@ -30,6 +30,8 @@ The functionality of the classic context manager is also available.
     - `advanced_verb`: Displaying the result of each test measurement
     - `auto_call_func`: Autorun of the decorated function (without arguments)
     - `queries`: Displaying raw SQL queries to the database
+    - `explain`: Displaying additional information about each request (has no effect on the orig. requests)
+    - `explain_opts`: For more information about the parameters for explain, see the documentation for your DBMS
     - `connection`: Connecting to your database, by default: django.db.connection
 
 ## Usage examples
@@ -55,4 +57,32 @@ with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
 >>> Test №1 | Queries count: 10 | Execution time: 0.04s
 >>> Test №2 | Queries count: 10 | Execution time: 0.04s
 >>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
+
+# Example of output when using queries and explain:
+
+for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
+    list(Reporter.objects.filter(pk=1))
+    list(Article.objects.filter(pk=1))
+
+>>> Test №1 | Queries count: 2 | Execution time: 0.22s
+>>>
+>>>
+>>> №[1] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_reporter USING INTEGER PRIMARY KEY (rowid=?)']
+>>> SELECT "tests_reporter"."id",
+>>>     "tests_reporter"."full_name"
+>>> FROM "tests_reporter"
+>>> WHERE "tests_reporter"."id" = %s
+>>>
+>>>
+>>> №[2] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_article USING INTEGER PRIMARY KEY (rowid=?)']
+>>> SELECT "tests_article"."id",
+>>>     "tests_article"."pub_date",
+>>>     "tests_article"."headline",
+>>>     "tests_article"."content",
+>>>     "tests_article"."reporter_id"
+>>> FROM "tests_article"
+>>> WHERE "tests_article"."id" = %s
+>>>
+>>>
+>>> Tests count: 1  |  Total queries count: 2  |  Total execution time: 0.22s  |  Median time one test is: 0.109s  |  Vendor: sqlite
 ```

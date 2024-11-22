@@ -5,6 +5,8 @@ import functools
 import statistics
 import time
 import warnings
+from collections import deque
+from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 from unittest.util import safe_repr
@@ -18,15 +20,17 @@ from django.test.utils import CaptureQueriesContext
 from typing_extensions import Self  # noqa: UP035
 
 from .dtos import IterationPrintDTO, SeveralPrintDTO, SinglePrintDTO
-from .printers import PrinterSql
+from .printers import AbcPrinter, PrinterSql
+from .wrappers import BaseExecutionWrapper, ExplainExecutionWrapper
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
     from types import TracebackType
 
     from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.backends.utils import CursorWrapper
 
-    from .types import DecoratedCallable, T
+    from .types import DecoratedCallable, QueriesLog, Query, T
 
 __all__ = ('CaptureQueries', 'capture_queries', 'ExtCaptureQueriesContext')
 
@@ -42,6 +46,8 @@ class AbcCapture(abc.ABC):
         advanced_verb: bool = False,
         auto_call_func: bool = False,
         queries: bool = False,
+        explain: bool = False,
+        explain_opts: dict[str, Any] | None = None,
         connection: BaseDatabaseWrapper | None = None,
     ) -> None:
         self.debug = _DEBUG
@@ -54,41 +60,49 @@ class AbcCapture(abc.ABC):
         self.advanced_verb = advanced_verb
         self.auto_call_func = auto_call_func
         self.queries = queries
+        self.explain = explain
 
+        # Обёртки для конкретных бд хранятся по адресам:
+        # django.db.backends.sqlite3.base.DatabaseWrapper
+        # django.db.backends.postgresql.base.DatabaseWrapper
         if connection is None:
             self.connection = db_connection
         else:
             self.connection = connection
 
         self.current_iteration = 0
-        self.all_execution_times: list[float] = []
-        self.final_queries = 0
 
-        self.printer = PrinterSql(
+        self.printer = self.printer_cls(
             self.connection.vendor, assert_q_count, verbose, advanced_verb, queries
         )
 
-    def __iter__(self) -> Self:
+        self.queries_log: QueriesLog = deque(maxlen=self.connection.queries_limit)
+
+        self.wrapper = self.wrapper_cls(
+            queries_log=self.queries_log, connection=self.connection, explain_opts=explain_opts or {}
+        )
+        self.wrapper_ctx_manager = self.__wrap_reqs_in_wrapper()
+
+    @property
+    def printer_cls(self) -> type[AbcPrinter]:
+        """Возвращает класс который должен исполнять функции форматирования и вывода SQL запросов"""
+        return PrinterSql
+
+    @property
+    def wrapper_cls(self) -> type[BaseExecutionWrapper]:
+        """Возвращает класс который должен исполнять все SQL запросы генерируемые пользователем."""
+        if self.explain:
+            return ExplainExecutionWrapper
+        return BaseExecutionWrapper
+
+    @contextmanager
+    def __wrap_reqs_in_wrapper(self) -> Generator[None, None, CursorWrapper]:
+        """Оборачивает все запросы к бд в обёртку."""
         if self.debug:
-            print('__iter__')
+            print('__wrap_reqs_in_wrapper')
 
-        self._enter()
-        return self
-
-    def __getitem__(self, index: int) -> dict[str, str] | None:
-        if self.debug:
-            print('__getitem__')
-
-        try:
-            return self.captured_queries[index]
-        except IndexError:
-            return None
-
-    def __len__(self) -> int:
-        if self.debug:
-            print('__len__')
-
-        return len(self.captured_queries)
+        with self.connection.execute_wrapper(self.wrapper):
+            yield
 
     def __enter__(self) -> Self:
         if self.debug:
@@ -98,11 +112,11 @@ class AbcCapture(abc.ABC):
             warnings.warn(
                 f'При использовании: {type(self).__name__} как контекстного менеджера,'
                 ' параметр number_runs > 1 не используеться.',
-                category=FutureWarning,
+                category=UserWarning,
                 stacklevel=2,
             )
-        self.start = time.perf_counter()
-        self._enter()
+
+        self.wrapper_ctx_manager.__enter__()
         return self
 
     def __exit__(
@@ -114,52 +128,59 @@ class AbcCapture(abc.ABC):
         if self.debug:
             print('__exit__')
 
-        self._exit()
+        self.wrapper_ctx_manager.__exit__(None, None, None)
+
         if exc_type is not None:
             return
 
-        end = time.perf_counter()
-        execution_time = end - self.start
-
+        queries_count = len(self)
         self.printer.print_single_sql(
             SinglePrintDTO(
-                final_queries=self.final_queries,
-                captured_queries=self.captured_queries,
-                _execution_time=execution_time,
+                queries_count=queries_count,
+                queries_log=self.queries_log,
+                execution_time_per_iter=self.wrapper.timer.execution_time_per_iter,
             )
         )
-        self._assert_queries_count()
+        self._assert_queries_count(queries_count)
+
+    def __iter__(self) -> Self:
+        if self.debug:
+            print('__iter__')
+
+        self.wrapper_ctx_manager.__enter__()
+        return self
 
     def __next__(self) -> Self:
         if self.debug:
             print('__next__')
 
-        execution_time, queries_count = self._run()
         if self.current_iteration > 0:
-            self.all_execution_times.append(execution_time)
-
             self.printer.iteration_print(
                 IterationPrintDTO(
                     current_iteration=self.current_iteration,
-                    queries_count=queries_count,
-                    _execution_time=execution_time,
+                    queries_count_per_iter=self.wrapper.timer.queries_count_per_iter,
+                    execution_time_per_iter=self.wrapper.timer.execution_time_per_iter,
                 )
             )
+
+        self.wrapper.timer.clear_exec_times_per_iter()
 
         if self.current_iteration < self.number_runs:
             self.current_iteration += 1
             return self
 
-        self._exit()
+        self.wrapper_ctx_manager.__exit__(None, None, None)
+
+        queries_count = len(self)
         self.printer.print_several_sql(
             SeveralPrintDTO(
-                final_queries=self.final_queries,
-                captured_queries=self.captured_queries,
+                queries_count=queries_count,
+                queries_log=self.queries_log,
                 current_iteration=self.current_iteration,
-                all_execution_times=self.all_execution_times,
+                all_execution_times=self.wrapper.timer.all_execution_times,
             )
         )
-        self._assert_queries_count()
+        self._assert_queries_count(queries_count)
 
         raise StopIteration
 
@@ -169,43 +190,45 @@ class AbcCapture(abc.ABC):
 
         @wraps(func)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            return self._loop_counter(func, *args, **kwargs)
+            if self.debug:
+                print('wrapped')
+
+            # Замер состоит из number_runs прогонов подряд
+            for _ in self:
+                return_value = func(*args, **kwargs)
+            return return_value
 
         if not self.auto_call_func:
             return wrapped
         return wrapped()  # автовызов декорируемой функции
 
-    @abc.abstractmethod
-    def _loop_counter(self, func: DecoratedCallable, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def __len__(self) -> int:
+        if self.debug:
+            print('__len__')
+
+        return len(self.queries_log)
+
+    def __getitem__(self, index: int) -> Query | None:
+        if self.debug:
+            print('__getitem__')
+
+        try:
+            return self.queries_log[index]
+        except IndexError:
+            return None
 
     @abc.abstractmethod
-    def _run(self) -> tuple[float, int]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _enter(self) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _exit(self) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _assert_queries_count(self) -> None:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def captured_queries(self) -> list[dict[str, str]]:
+    def _assert_queries_count(self, queries_count: int) -> None:
         raise NotImplementedError
 
 
 class CaptureQueries(AbcCapture):
     """
-    Замеряет количество запросов к бд внутри тела тестовой функции,
+    Замеряет количество запросов к бд и,
     выводит подробную информацию о замерах,
     валидирует количество запросов.
+
+    ---
 
     UseCases::
 
@@ -228,6 +251,36 @@ class CaptureQueries(AbcCapture):
         >>> Test №2 | Queries count: 10 | Execution time: 0.04s
         >>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
 
+        # Пример вывода при использовании queries и explain:
+
+        for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
+            list(Reporter.objects.filter(pk=1))
+            list(Article.objects.filter(pk=1))
+
+        >>> Test №1 | Queries count: 2 | Execution time: 0.22s
+        >>>
+        >>>
+        >>> №[1] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_reporter USING INTEGER PRIMARY KEY (rowid=?)']
+        >>> SELECT "tests_reporter"."id",
+        >>>     "tests_reporter"."full_name"
+        >>> FROM "tests_reporter"
+        >>> WHERE "tests_reporter"."id" = %s
+        >>>
+        >>>
+        >>> №[2] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_article USING INTEGER PRIMARY KEY (rowid=?)']
+        >>> SELECT "tests_article"."id",
+        >>>     "tests_article"."pub_date",
+        >>>     "tests_article"."headline",
+        >>>     "tests_article"."content",
+        >>>     "tests_article"."reporter_id"
+        >>> FROM "tests_article"
+        >>> WHERE "tests_article"."id" = %s
+        >>>
+        >>>
+        >>> Tests count: 1  |  Total queries count: 2  |  Total execution time: 0.22s  |  Median time one test is: 0.109s  |  Vendor: sqlite
+
+    ---
+
     - assert_q_count: Ожидаемое количество запросов к БД иначе
      "AssertionError: N not less than or equal to N queries"
     - number_runs: Количество запусков тестовой функции / тестового цикла
@@ -235,7 +288,11 @@ class CaptureQueries(AbcCapture):
     - advanced_verb: Отображение результа каждого тестового замера
     - auto_call_func: Автозапуск декорируемой функции (без аргументов)
     - queries: Отображение сырых SQL запросов к БД
+    - explain: Отображение доп. информации о каждом запросе (не оказывает эффекта на ориг. запросы)
+    - explain_opts: Параметры для explain, подробнее узнавайте в документации к своей субд
     - connection: Подключение к вашей базе данных, по умолчанию: django.db.connection
+
+    ---
 
     Tests count: Общее количество тестовых замеров
     Total queries count: Общее количество запросов к БД внутри тестовой функции в рамках всех замеров
@@ -245,100 +302,12 @@ class CaptureQueries(AbcCapture):
     Vendor: Тестируемая база данных
     """  # noqa: E501
 
-    def _loop_counter(self, func: DecoratedCallable, *args: Any, **kwargs: Any) -> Any:
+    def _assert_queries_count(self, queries_count: int) -> None:
         if self.debug:
-            print('__loop_counter')
+            print('_assert_queries_count')
 
-        self._enter()
-
-        # замер состоит из number_runs прогонов подряд
-        while self.current_iteration < self.number_runs:
-            self.current_iteration += 1
-
-            start_queries = len(self.connection.queries)
-            start = time.perf_counter()
-
-            return_value = func(*args, **kwargs)
-
-            end = time.perf_counter()
-            execution_time = end - start
-
-            end_queries = len(self.connection.queries)
-            queries_count = end_queries - start_queries
-
-            self.all_execution_times.append(execution_time)
-
-            self.printer.iteration_print(
-                IterationPrintDTO(
-                    current_iteration=self.current_iteration,
-                    queries_count=queries_count,
-                    _execution_time=execution_time,
-                )
-            )
-
-        self._exit()
-        self.printer.print_several_sql(
-            SeveralPrintDTO(
-                final_queries=self.final_queries,
-                captured_queries=self.captured_queries,
-                current_iteration=self.current_iteration,
-                all_execution_times=self.all_execution_times,
-            )
-        )
-        self._assert_queries_count()
-
-        return return_value
-
-    def _run(self) -> tuple[float, int]:
-        if self.debug:
-            print('__run')
-
-        self.start_queries = len(self.connection.queries)
-        self.start = time.perf_counter()
-
-        if not hasattr(self, 'prev_start'):
-            self.prev_start = self.start
-            self.prev_queries = self.start_queries
-
-            execution_time = 0.0
-            queries_count = self.start_queries
-        else:
-            execution_time = self.start - self.prev_start
-            self.prev_start = self.start
-
-            queries_count = self.start_queries - self.prev_queries
-            self.prev_queries = self.start_queries
-
-        return execution_time, queries_count
-
-    def _enter(self) -> None:
-        if self.debug:
-            print('__enter')
-
-        self.force_debug_cursor = self.connection.force_debug_cursor
-        self.connection.force_debug_cursor = True
-        # Run any initialization queries if needed so that they won't be
-        # included as part of the count.
-        self.connection.ensure_connection()
-        self.initial_queries = len(self.connection.queries_log)
-        # self.final_queries = None
-        request_started.disconnect(reset_queries)
-
-    def _exit(self) -> None:
-        if self.debug:
-            print('__exit')
-
-        self.connection.force_debug_cursor = self.force_debug_cursor
-        request_started.connect(reset_queries)
-        self.final_queries = len(self.connection.queries_log)
-
-    def _assert_queries_count(self) -> None:
         if self.assert_q_count is not None:
-            assert self.final_queries <= self.assert_q_count, self.printer.assert_msg(self.final_queries)
-
-    @property
-    def captured_queries(self) -> list[dict[str, str]]:
-        return self.connection.queries[self.initial_queries : self.final_queries]
+            assert queries_count <= self.assert_q_count, self.printer.assert_msg(queries_count)
 
 
 def capture_queries(

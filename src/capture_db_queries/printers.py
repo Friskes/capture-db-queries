@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from collections import deque
 from typing import TYPE_CHECKING, Any
 from unittest.util import safe_repr
 
@@ -8,61 +9,12 @@ import sqlparse
 
 if TYPE_CHECKING:
     from .dtos import IterationPrintDTO, SeveralPrintDTO, SinglePrintDTO
+    from .types import QueriesLog
 
 _EXCLUDE = True
 
 
 class AbcPrinter(abc.ABC):
-    @abc.abstractmethod
-    def _print_sql(self, template: str, **format_kwargs: Any) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def print_single_sql(self, dto: SinglePrintDTO) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def print_several_sql(self, dto: SeveralPrintDTO) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def iteration_print(self, dto: IterationPrintDTO) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def assert_msg(self, final_queries: int) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def beautiful_sql(self, captured_queries: list[dict[str, str]]) -> str:
-        raise NotImplementedError
-
-
-class PrinterSql(AbcPrinter):
-    EXCLUDE = ('BEGIN', 'COMMIT', 'ROLLBACK')
-
-    single_sql_template = (
-        'Queries count: {final_queries}  |  Execution time: {execution_time}s  |  Vendor: {vendor}'
-    )
-    several_sql_template = (
-        'Tests count: {current_iteration}  |  '
-        'Total queries count: {final_queries}  |  '
-        'Total execution time: {sum_all_execution_times}s  |  '
-        'Median time one test is: {median_all_execution_times}s  |  '
-        'Vendor: {vendor}'
-    )
-    iteration_sql_template = (
-        'Test №{current_iteration} | '
-        'Queries count: {queries_count} | '
-        'Execution time: {execution_time}s'
-    )
-    assert_msg_template = '{final_queries} not less than or equal to {assert_q_count} queries'
-
-    captured_queries_template = (
-        '\n{captured_queries_count} queries executed on {vendor}, '
-        '{assert_q_count} expected\nCaptured queries were:\n\n{sql}\n'
-    )
-
     def __init__(
         self,
         vendor: str,
@@ -77,24 +29,93 @@ class PrinterSql(AbcPrinter):
         self.advanced_verb = advanced_verb
         self.queries = queries
 
-    def _print_sql(self, template: str, **format_kwargs: Any) -> str:
-        sql = ''
+    def print_sql(self, template: str, queries_log: QueriesLog, **format_kwargs: Any) -> str:
         if self.queries:
-            print(self.beautiful_sql(format_kwargs['captured_queries']))
+            print(self._beautiful_queries(queries_log))
 
         if self.verbose:
-            sql = template.format(**format_kwargs, vendor=self.vendor)
-            print(sql)
-        return sql
+            data = template.format(**format_kwargs, vendor=self.vendor)
+            print(data)
+            return data
+        return ''
+
+    def _beautiful_queries(self, queries_log: QueriesLog) -> str:
+        """"""
+        filtered_queries = self.filter_queries(queries_log)
+
+        formatted_queries = self.format_sql(filtered_queries)
+
+        formatted_queries = self.format_explain(formatted_queries)
+
+        return self.build_output_string(formatted_queries)
+
+    @abc.abstractmethod
+    def print_single_sql(self, dto: SinglePrintDTO) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def print_several_sql(self, dto: SeveralPrintDTO) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def iteration_print(self, dto: IterationPrintDTO) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def assert_msg(self, queries_count: int) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def filter_queries(self, queries_log: QueriesLog) -> QueriesLog:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def format_sql(self, queries_log: QueriesLog) -> QueriesLog:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def format_explain(self, queries_log: QueriesLog) -> QueriesLog:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_output_string(self, queries_log: QueriesLog) -> str:
+        raise NotImplementedError
+
+
+class PrinterSql(AbcPrinter):
+    EXCLUDE = ('BEGIN', 'COMMIT', 'ROLLBACK')
+
+    single_sql_template = (
+        'Queries count: {queries_count}  |  '
+        'Execution time: {execution_time_per_iter:.3f}s  |  Vendor: {vendor}'
+    )
+    several_sql_template = (
+        'Tests count: {current_iteration}  |  '
+        'Total queries count: {queries_count}  |  '
+        'Total execution time: {sum_all_execution_times:.2f}s  |  '
+        'Median time one test is: {median_all_execution_times:.3f}s  |  '
+        'Vendor: {vendor}'
+    )
+    iteration_sql_template = (
+        'Test №{current_iteration} | '
+        'Queries count: {queries_count_per_iter} | '
+        'Execution time: {execution_time_per_iter:.2f}s'
+    )
+    assert_msg_template = '{queries_count} not less than or equal to {assert_q_count} queries'
+
+    sql_template = '№[{ordinal_num}] time=[{time:.3f}]{explain}\n{sql}'
 
     def print_single_sql(self, dto: SinglePrintDTO) -> str:
-        return self._print_sql(
-            self.single_sql_template, final_queries=dto.final_queries, execution_time=dto.execution_time
+        return self.print_sql(
+            self.single_sql_template,
+            dto.queries_log,
+            queries_count=dto.queries_count,
+            execution_time_per_iter=dto.execution_time_per_iter,
         )
 
     def print_several_sql(self, dto: SeveralPrintDTO) -> str:
-        format_kwargs: dict[str, str | int | float] = {
-            'final_queries': dto.final_queries,
+        format_kwargs: dict[str, int | float] = {
+            'queries_count': dto.queries_count,
             'current_iteration': dto.current_iteration,
         }
         if dto.all_execution_times:
@@ -104,49 +125,57 @@ class PrinterSql(AbcPrinter):
                     'median_all_execution_times': dto.median_all_execution_times,
                 }
             )
-        return self._print_sql(self.several_sql_template, **format_kwargs)
+        return self.print_sql(self.several_sql_template, dto.queries_log, **format_kwargs)
 
     def iteration_print(self, dto: IterationPrintDTO) -> None:
         if self.advanced_verb:
             print(
                 self.iteration_sql_template.format(
                     current_iteration=dto.current_iteration,
-                    queries_count=dto.queries_count,
-                    execution_time=dto.execution_time,
+                    queries_count_per_iter=dto.queries_count_per_iter,
+                    execution_time_per_iter=dto.execution_time_per_iter,
                 )
             )
 
-    def assert_msg(self, final_queries: int) -> str:
+    def assert_msg(self, queries_count: int) -> str:
         return self.assert_msg_template.format(
-            final_queries=safe_repr(final_queries), assert_q_count=safe_repr(self.assert_q_count)
+            queries_count=safe_repr(queries_count), assert_q_count=safe_repr(self.assert_q_count)
         )
 
-    def beautiful_sql(self, captured_queries: list[dict[str, str]]) -> str:
+    def format_sql(self, queries_log: QueriesLog) -> QueriesLog:
+        formatted_queries = queries_log.copy()
+        for query in formatted_queries:
+            query['sql'] = sqlparse.format(  # Подсказка: sqlparse.formatter.validate_options
+                sql=query['sql'],
+                encoding='utf-8',
+                output_format='sql',
+                reindent_aligned=True,
+            )
+        return formatted_queries
+
+    def filter_queries(self, queries_log: QueriesLog) -> QueriesLog:
         if _EXCLUDE:
-            filtered_queries = [q for q in captured_queries if q['sql'].upper() not in self.EXCLUDE]
-        else:
-            filtered_queries = captured_queries
+            return deque(
+                query
+                for query in queries_log
+                if query['sql'].upper() not in self.EXCLUDE  # type: ignore[union-attr]
+            )
+        return queries_log
 
-        # sqlparse.formatter.validate_options  # подсказка
-        formatted_queries = [
-            {
-                'sql': sqlparse.format(
-                    sql=query['sql'],
-                    encoding='utf-8',
-                    output_format='sql',
-                    reindent_aligned=True,
-                ),
-                'time': query['time'],
-            }
-            for query in filtered_queries
-        ]
-        sql = '\n\n\n'.join(
-            f'№[{ordinal_num}] ⧖[{query["time"]}]\n{query["sql"]}'
-            for ordinal_num, query in enumerate(formatted_queries, start=1)
+    def format_explain(self, queries_log: QueriesLog) -> QueriesLog:
+        for query in queries_log:
+            if 'explain' in query:
+                query['explain'] = f' explain=[{query["explain"]!r}]'
+        return queries_log
+
+    def build_output_string(self, queries_log: QueriesLog) -> str:
+        formatted_queries = '\n\n\n'.join(
+            self.sql_template.format(
+                ordinal_num=ordinal_num,
+                time=query['time'],
+                sql=query['sql'],
+                explain=query.get('explain', ''),
+            )
+            for ordinal_num, query in enumerate(queries_log, start=1)
         )
-        return self.captured_queries_template.format(
-            captured_queries_count=len(captured_queries),
-            vendor=self.vendor,
-            assert_q_count=self.assert_q_count,
-            sql=sql,
-        )
+        return f'\n\n\n{formatted_queries}\n\n'
