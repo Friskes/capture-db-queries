@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.utils.regex_helper import _lazy_re_compile
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 class BaseExecutionWrapper:
     def __init__(self, queries_log: QueriesLog, *args: Any, **kwargs: Any) -> None:
-        self.timer = ContextTimer()
+        self.timer = ContextTimer(time.perf_counter)
         self.queries_log = queries_log
 
     def __call__(

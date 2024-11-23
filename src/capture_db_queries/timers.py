@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from typing_extensions import Self  # noqa: UP035
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import TracebackType
 
 
 class ContextTimer:
-    def __init__(self) -> None:
+    def __init__(self, measure_func: Callable[..., float]) -> None:
+        self.measure_func = measure_func
         self.execution_time = 0.0
         self.all_execution_times: list[float] = []
         self.exec_times_per_iter: list[float] = []
@@ -24,7 +25,7 @@ class ContextTimer:
         return len(self.exec_times_per_iter)
 
     def __enter__(self) -> Self:
-        self._start = time.monotonic()
+        self._start = self.measure_func()
         return self
 
     def __exit__(
@@ -36,7 +37,7 @@ class ContextTimer:
         if exc_type is not None:
             return
 
-        self._end = time.monotonic()
+        self._end = self.measure_func()
         self.execution_time = self._end - self._start
         self.all_execution_times.append(self.execution_time)
         self.exec_times_per_iter.append(self.execution_time)
