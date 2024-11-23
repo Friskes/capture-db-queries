@@ -269,7 +269,7 @@ class TestOutputCaptureQueries:
         output = intercept_output.getvalue()
 
         assert re.match(
-            f'Tests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
+            f'\n\nTests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
             output,
         ), 'incorrect output'
 
@@ -284,7 +284,7 @@ class TestOutputCaptureQueries:
         output = intercept_output.getvalue()
 
         assert re.match(
-            f'Tests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
+            f'\n\nTests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
             output,
         ), 'incorrect output'
 

@@ -87,23 +87,23 @@ class PrinterSql(AbcPrinter):
 
     single_sql_template = (
         'Queries count: {queries_count}  |  '
-        'Execution time: {execution_time_per_iter:.3f}s  |  Vendor: {vendor}'
+        'Execution time: {execution_time_per_iter:.6f}s  |  Vendor: {vendor}\n'
     )
     several_sql_template = (
         'Tests count: {current_iteration}  |  '
         'Total queries count: {queries_count}  |  '
-        'Total execution time: {sum_all_execution_times:.2f}s  |  '
-        'Median time one test is: {median_all_execution_times:.3f}s  |  '
-        'Vendor: {vendor}'
+        'Total execution time: {sum_all_execution_times:.5f}s  |  '
+        'Median time one test is: {median_all_execution_times:.6f}s  |  '
+        'Vendor: {vendor}\n'
     )
     iteration_sql_template = (
         'Test №{current_iteration} | '
         'Queries count: {queries_count_per_iter} | '
-        'Execution time: {execution_time_per_iter:.2f}s'
+        'Execution time: {execution_time_per_iter:.6f}s'
     )
     assert_msg_template = '{queries_count} not less than or equal to {assert_q_count} queries'
 
-    sql_template = '№[{ordinal_num}] time=[{time:.3f}]{explain}\n{sql}'
+    sql_template = '№[{ordinal_num}] time=[{time:.6f}]{explain}\n{sql}'
 
     def print_single_sql(self, dto: SinglePrintDTO) -> str:
         return self.print_sql(
@@ -125,10 +125,14 @@ class PrinterSql(AbcPrinter):
                     'median_all_execution_times': dto.median_all_execution_times,
                 }
             )
+        if self.verbose and not self.advanced_verb and not self.queries:
+            print('\n')
         return self.print_sql(self.several_sql_template, dto.queries_log, **format_kwargs)
 
     def iteration_print(self, dto: IterationPrintDTO) -> None:
         if self.advanced_verb:
+            if dto.current_iteration == 1:
+                print('\n')
             print(
                 self.iteration_sql_template.format(
                     current_iteration=dto.current_iteration,
@@ -155,17 +159,18 @@ class PrinterSql(AbcPrinter):
 
     def filter_queries(self, queries_log: QueriesLog) -> QueriesLog:
         if _EXCLUDE:
-            return deque(
-                query
-                for query in queries_log
-                if query['sql'].upper() not in self.EXCLUDE  # type: ignore[union-attr]
-            )
+            return deque(query for query in queries_log if query['sql'].upper() not in self.EXCLUDE)
         return queries_log
 
     def format_explain(self, queries_log: QueriesLog) -> QueriesLog:
         for query in queries_log:
             if 'explain' in query:
-                query['explain'] = f' explain=[{query["explain"]!r}]'
+                explain_count = len(query['explain'].split('\n'))
+                if explain_count > 1:
+                    explain = f' explain=[\n{query["explain"]}\n]'
+                else:
+                    explain = f' explain=[{query["explain"]}]'
+                query['explain'] = explain
         return queries_log
 
     def build_output_string(self, queries_log: QueriesLog) -> str:
@@ -178,4 +183,4 @@ class PrinterSql(AbcPrinter):
             )
             for ordinal_num, query in enumerate(queries_log, start=1)
         )
-        return f'\n\n\n{formatted_queries}\n\n'
+        return f'\n\n{formatted_queries}\n\n'

@@ -37,9 +37,9 @@ class TestPrinter:
             maxlen=9000,
         )
         self.queries_log_output = (
-            '\n\n\n№[1] time=[0.094]\nSELECT "tests_reporter"."id",\n       '
+            '\n\n№[1] time=[0.094000]\nSELECT "tests_reporter"."id",\n       '
             '"tests_reporter"."full_name"\n  FROM "tests_reporter"\n '
-            'WHERE "tests_reporter"."id" = %s\n\n\n№[2] time=[0.109]\nSELECT "tests_article"."id",\n       '  # noqa: E501
+            'WHERE "tests_reporter"."id" = %s\n\n\n№[2] time=[0.109000]\nSELECT "tests_article"."id",\n       '  # noqa: E501
             '"tests_article"."pub_date",\n       '
             '"tests_article"."headline",\n       '
             '"tests_article"."content",\n       '
@@ -48,11 +48,11 @@ class TestPrinter:
         )
 
         self.assert_msg = '4 not less than or equal to 2 queries'
-        self.iter_output = 'Test №1 | Queries count: 2 | Execution time: 0.74s\n'
-        self.single_output = 'Queries count: 2  |  Execution time: 0.743s  |  Vendor: fake_vendor\n'
+        self.iter_output = '\n\nTest №1 | Queries count: 2 | Execution time: 0.743167s\n'
+        self.single_output = 'Queries count: 2  |  Execution time: 0.743167s  |  Vendor: fake_vendor\n\n'
         self.several_output = (
-            'Tests count: 1  |  Total queries count: 2  |  '
-            'Total execution time: 1.49s  |  Median time one test is: 0.743s  |  Vendor: fake_vendor\n'
+            '\n\nTests count: 1  |  Total queries count: 2  |  Total execution time: 1.48633s  |  '
+            'Median time one test is: 0.743167s  |  Vendor: fake_vendor\n\n'
         )
 
         self.iter_dto = IterationPrintDTO(

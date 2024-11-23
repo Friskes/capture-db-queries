@@ -112,6 +112,7 @@ warn_return_any = false  # [no-any-return]
 disable_error_code = [
     "operator",
     "assignment",
+    "union-attr",
 ]
 
 

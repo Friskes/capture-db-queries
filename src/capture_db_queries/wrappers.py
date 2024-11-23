@@ -58,6 +58,7 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
 
     https://docs.djangoproject.com/en/5.1/topics/db/instrumentation/#connection-execute-wrapper
     https://docs.djangoproject.com/en/5.1/ref/models/querysets/#explain
+    from django_extensions.management.debug_cursor import monkey_patch_cursordebugwrapper
     """
 
     # Inspired from
