@@ -5,6 +5,8 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 from unittest.util import safe_repr
 
+import pygments.formatters
+import pygments.lexers
 import sqlparse
 
 if TYPE_CHECKING:
@@ -45,6 +47,8 @@ class AbcPrinter(abc.ABC):
 
         formatted_queries = self.format_sql(filtered_queries)
 
+        formatted_queries = self.colorize_sql(formatted_queries)
+
         formatted_queries = self.format_explain(formatted_queries)
 
         return self.build_output_string(formatted_queries)
@@ -74,6 +78,10 @@ class AbcPrinter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def colorize_sql(self, queries_log: QueriesLog) -> QueriesLog:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def format_explain(self, queries_log: QueriesLog) -> QueriesLog:
         raise NotImplementedError
 
@@ -86,7 +94,7 @@ class PrinterSql(AbcPrinter):
     EXCLUDE = ('BEGIN', 'COMMIT', 'ROLLBACK')
 
     single_sql_template = (
-        'Queries count: {queries_count}  |  '
+        '\nQueries count: {queries_count}  |  '
         'Execution time: {execution_time_per_iter:.6f}s  |  Vendor: {vendor}\n'
     )
     several_sql_template = (
@@ -117,14 +125,9 @@ class PrinterSql(AbcPrinter):
         format_kwargs: dict[str, int | float] = {
             'queries_count': dto.queries_count,
             'current_iteration': dto.current_iteration,
+            'sum_all_execution_times': dto.sum_all_execution_times,
+            'median_all_execution_times': dto.median_all_execution_times,
         }
-        if dto.all_execution_times:
-            format_kwargs.update(
-                {
-                    'sum_all_execution_times': dto.sum_all_execution_times,
-                    'median_all_execution_times': dto.median_all_execution_times,
-                }
-            )
         if self.verbose and not self.advanced_verb and not self.queries:
             print('\n')
         return self.print_sql(self.several_sql_template, dto.queries_log, **format_kwargs)
@@ -146,10 +149,16 @@ class PrinterSql(AbcPrinter):
             queries_count=safe_repr(queries_count), assert_q_count=safe_repr(self.assert_q_count)
         )
 
+    def filter_queries(self, queries_log: QueriesLog) -> QueriesLog:
+        if _EXCLUDE:
+            return deque(query for query in queries_log if query['sql'].upper() not in self.EXCLUDE)
+        return queries_log
+
     def format_sql(self, queries_log: QueriesLog) -> QueriesLog:
         formatted_queries = queries_log.copy()
         for query in formatted_queries:
-            query['sql'] = sqlparse.format(  # Подсказка: sqlparse.formatter.validate_options
+            # A hint on the parameters: sqlparse.formatter.validate_options
+            query['sql'] = sqlparse.format(
                 sql=query['sql'],
                 encoding='utf-8',
                 output_format='sql',
@@ -157,9 +166,14 @@ class PrinterSql(AbcPrinter):
             )
         return formatted_queries
 
-    def filter_queries(self, queries_log: QueriesLog) -> QueriesLog:
-        if _EXCLUDE:
-            return deque(query for query in queries_log if query['sql'].upper() not in self.EXCLUDE)
+    def colorize_sql(self, queries_log: QueriesLog) -> QueriesLog:
+        for query in queries_log:
+            colorized_sql = pygments.highlight(
+                query['sql'],
+                pygments.lexers.get_lexer_by_name('sql'),
+                pygments.formatters.TerminalFormatter(),
+            )
+            query['sql'] = colorized_sql
         return queries_log
 
     def format_explain(self, queries_log: QueriesLog) -> QueriesLog:
