@@ -41,7 +41,7 @@ def _select(reporter_id: UUID, article_id: UUID) -> None:
 
 
 class BasicTestsFor3ChoicesOfCaptureQueries:
-    """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
+    """"""
 
     def setup_method(self, method: Callable[..., Any]) -> None:
         self.reporter, self.article = request_to_db()
@@ -49,6 +49,7 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
     def call_capture_queries(self, **kwargs: Any) -> CaptureQueries:
         raise NotImplementedError
 
+    # @pytest.mark.usefixtures('_debug_true')
     def test_basic_logic(self) -> None:
         obj = self.call_capture_queries()
 
@@ -74,14 +75,14 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
         data = obj.queries_log[0]['sql']
         assert obj.queries_log[0]['sql'] == (
             'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
-            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s'
+            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
         ), data
 
         data = obj.queries_log[1]['sql']
         assert obj.queries_log[1]['sql'] == (
             'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
             '"tests_article"."content", "tests_article"."reporter_id" '
-            'FROM "tests_article" WHERE "tests_article"."id" = %s'
+            'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
         ), data
 
         with pytest.raises(KeyError, match='explain'):
@@ -110,14 +111,14 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
         data = obj.queries_log[0]['sql']
         assert data == (
             'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
-            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s'
+            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
         ), data
 
         data = obj.queries_log[1]['sql']
         assert data == (
             'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
             '"tests_article"."content", "tests_article"."reporter_id" '
-            'FROM "tests_article" WHERE "tests_article"."id" = %s'
+            'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
         ), data
 
         # data = obj.queries_log[0]['explain']
@@ -134,6 +135,7 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
         class FakeConnection:
             vendor = 'fake_vendor'
             queries_limit = 4
+            ops = connection.ops
 
             @contextmanager
             def execute_wrapper(
@@ -176,6 +178,31 @@ class TestLoopCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
         data = statistics.median(obj.wrapper.timer.all_execution_times)
         gt, lt = 0.08, 0.13
         assert gt < data < lt, f'{gt} < {data} < {lt}'
+
+    def test_execute_raw_sql(self) -> None:
+        reporter_raw_sql = (
+            'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
+            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
+        )
+        article_raw_sql = (
+            'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
+            '"tests_article"."content", "tests_article"."reporter_id" '
+            'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
+        )
+        obj = CaptureQueries()
+        for _ in obj:
+            list(Reporter.objects.raw(reporter_raw_sql))
+            list(Article.objects.raw(article_raw_sql))
+
+        data = obj.queries_log[0]['sql']
+        assert data == (reporter_raw_sql), data
+
+        data = obj.queries_log[1]['sql']
+        assert data == (article_raw_sql), data
+
+    def test_without_requests(self) -> None:
+        for _ in CaptureQueries(advanced_verb=True):
+            pass  # no have requests
 
 
 @pytest.mark.django_db(transaction=True)
@@ -230,6 +257,34 @@ class TestDecoratorCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
         gt, lt = 0.08, 0.13
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
+    def test_execute_raw_sql(self) -> None:
+        reporter_raw_sql = (
+            'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
+            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
+        )
+        article_raw_sql = (
+            'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
+            '"tests_article"."content", "tests_article"."reporter_id" '
+            'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
+        )
+        obj = CaptureQueries(auto_call_func=True)
+
+        @obj
+        def _() -> None:
+            list(Reporter.objects.raw(reporter_raw_sql))
+            list(Article.objects.raw(article_raw_sql))
+
+        data = obj.queries_log[0]['sql']
+        assert data == (reporter_raw_sql), data
+
+        data = obj.queries_log[1]['sql']
+        assert data == (article_raw_sql), data
+
+    def test_without_requests(self) -> None:
+        @CaptureQueries(advanced_verb=True, auto_call_func=True)
+        def func() -> None:
+            pass  # no have requests
+
 
 @pytest.mark.django_db(transaction=True)
 class TestContextManagerCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
@@ -238,26 +293,50 @@ class TestContextManagerCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
     def call_capture_queries(self, **kwargs: Any) -> CaptureQueries:
         with slow_down_execute(0.1):  # noqa: SIM117
             with CaptureQueries(**kwargs) as obj:
-                obj.current_iteration = 1  # XXX(Ars): Временный хак для тестов, позже надо переработать
+                obj.current_iteration = 1  # XXX(Ars): A temporary hack only for tests, reworked later
                 _select(self.reporter.pk, self.article.pk)
         return obj
 
-    # @pytest.mark.filterwarnings("ignore::UserWarning")  # warn не отображается, и не вызывает ошибки
-    # @pytest.mark.filterwarnings('default::UserWarning')  # warn отображается, и не вызывает ошибки
+    # @pytest.mark.filterwarnings("ignore::UserWarning")  # warn not show, and not raise exc
+    # @pytest.mark.filterwarnings('default::UserWarning')  # warn show, and not raise exc
     def test_param__number_runs(self) -> None:
         with pytest.raises(
             UserWarning,
             match=(
-                'При использовании: CaptureQueries как контекстного менеджера, '
-                'параметр number_runs > 1 не используеться.'
+                'When using: CaptureQueries as a context manager,'
+                ' the number_runs > 1 parameter is not used.'
             ),
         ):
             self.call_capture_queries(number_runs=3)
 
+    def test_execute_raw_sql(self) -> None:
+        reporter_raw_sql = (
+            'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
+            'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
+        )
+        article_raw_sql = (
+            'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
+            '"tests_article"."content", "tests_article"."reporter_id" '
+            'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
+        )
+        with CaptureQueries() as obj:
+            list(Reporter.objects.raw(reporter_raw_sql))
+            list(Article.objects.raw(article_raw_sql))
+
+        data = obj.queries_log[0]['sql']
+        assert data == (reporter_raw_sql), data
+
+        data = obj.queries_log[1]['sql']
+        assert data == (article_raw_sql), data
+
+    def test_without_requests(self) -> None:
+        with CaptureQueries(advanced_verb=True):
+            pass  # no have requests
+
 
 @pytest.mark.django_db(transaction=True)
 class TestOutputCaptureQueries:
-    """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
+    """The -s argument must be passed when running py test to output output"""
 
     # @pytest.mark.usefixtures('_debug_true')
     def test_capture_queries_loop(self, intercept_output: StringIO) -> None:
@@ -271,7 +350,7 @@ class TestOutputCaptureQueries:
         assert re.match(
             f'\n\nTests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
             output,
-        ), 'incorrect output'
+        ), f'incorrect output = {output}'
 
     # @pytest.mark.usefixtures('_debug_true')
     def test_capture_queries_decorator(self, intercept_output: StringIO) -> None:
@@ -286,7 +365,7 @@ class TestOutputCaptureQueries:
         assert re.match(
             f'\n\nTests count: 100  |  Total queries count: 200  |  Total execution time: {ANYNUM}s  |  Median time one test is: {ANYNUM}s\n',  # noqa: E501
             output,
-        ), 'incorrect output'
+        ), f'incorrect output = {output}'
 
     # @pytest.mark.usefixtures('_debug_true')
     def test_capture_queries_context_manager(self, intercept_output: StringIO) -> None:
@@ -296,9 +375,9 @@ class TestOutputCaptureQueries:
         output = intercept_output.getvalue()
 
         assert re.match(
-            f'Queries count: 2  |  Execution time: {ANYNUM}s',
+            f'\nQueries count: 2  |  Execution time: {ANYNUM}s  |  Vendor: sqlite\n\n',
             output,
-        ), 'incorrect output'
+        ), f'incorrect output = {output}'
 
 
 @pytest.mark.django_db(transaction=True)

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import time
+import traceback
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.utils.regex_helper import _lazy_re_compile
 
+from ._logging import log
 from .timers import ContextTimer
 
 if TYPE_CHECKING:
@@ -19,32 +21,47 @@ if TYPE_CHECKING:
 
 
 class BaseExecutionWrapper:
-    def __init__(self, queries_log: QueriesLog, *args: Any, **kwargs: Any) -> None:
-        self.timer = ContextTimer(time.perf_counter)
+    def __init__(
+        self, connection: BaseDatabaseWrapper, queries_log: QueriesLog, *args: Any, **kwargs: Any
+    ) -> None:
+        log.debug('')
+
+        self.connection = connection
         self.queries_log = queries_log
+        self.timer = ContextTimer(time.perf_counter)
+
+        # Wrappers for specific databases are stored at addresses:
+        # django.db.backends.sqlite3.operations.DatabaseOperations
+        # django.db.backends.postgresql.operations.DatabaseOperations
+        self.db_operations: BaseDatabaseOperations = self.connection.ops
 
     def __call__(
         self,
-        execute: Callable[..., CursorWrapper | None],
+        execute: Callable[..., CursorWrapper],
         sql: str,
         params: tuple[Any, ...],
         many: bool,
         context: dict[str, Any],
     ) -> CursorWrapper | None:
         """
-        Выполняет оригинальный запрос
+        Executes the original SQL request.
         """
         with self.timer as timer:
             try:
                 result = execute(sql, params, many, context)
             except Exception as exc:
-                print('Что-то пошло не так:', exc)
+                print('Something went wrong:', exc)
                 return None
 
-        # from django.db.backends.utils import CursorDebugWrapper(connection.cursor(), connection)
+        if not many:
+            # Get filled SQL with params
+            sql = self.db_operations.last_executed_query(context['cursor'], sql, params)
+
         query: Query = {'sql': sql, 'time': timer.execution_time}
         query = self.update_query(query)
         self.queries_log.append(query)
+
+        log.trace('Location of SQL Call:\n%s', ''.join(traceback.format_stack()))
 
         return result
 
@@ -54,12 +71,13 @@ class BaseExecutionWrapper:
 
 class ExplainExecutionWrapper(BaseExecutionWrapper):
     """
-    Класс для вызова EXPLAIN на каждом SELECT-запросе.
-    С сохранением полной функциональности метода QuerySet.explain().
+    A class for calling EXPLAIN before each original SELECT request.
+    While maintaining the full functionality of the Query Set.explain() method.
 
-    https://docs.djangoproject.com/en/5.1/topics/db/instrumentation/#connection-execute-wrapper
+    The EXPLAIN call is not fixed in any way and does not affect the measurement results.
+
     https://docs.djangoproject.com/en/5.1/ref/models/querysets/#explain
-    from django_extensions.management.debug_cursor import monkey_patch_cursordebugwrapper
+    https://www.postgresql.org/docs/current/sql-explain.html
     """
 
     # Inspired from
@@ -72,20 +90,18 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
 
     def __init__(
         self,
-        queries_log: QueriesLog,
         connection: BaseDatabaseWrapper,
+        queries_log: QueriesLog,
         explain_opts: dict[str, Any],
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        # # https://www.postgresql.org/docs/current/sql-explain.html
-        super().__init__(queries_log, *args, **kwargs)
-        self.connection = connection
+        super().__init__(connection, queries_log, *args, **kwargs)
         self.explain_info = self.build_explain_info(**explain_opts)
 
     def __call__(
         self,
-        execute: Callable[..., CursorWrapper | None],
+        execute: Callable[..., CursorWrapper],
         sql: str,
         params: tuple[Any, ...],
         many: bool,
@@ -100,16 +116,11 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         return query
 
     def _execute_explain(self, sql: str, params: tuple[Any, ...], many: bool) -> str | None:
-        # Проверяем, является ли запрос SELECT-запросом
+        # Checking whether the request is a SELECT request
         if not sql.strip().lower().startswith('select'):
             return None
 
-        # Обёртки для конкретных бд хранятся по адресам:
-        # django.db.backends.sqlite3.operations.DatabaseOperations
-        # django.db.backends.postgresql.operations.DatabaseOperations
-        db_operations: BaseDatabaseOperations = self.connection.ops
-
-        explain_query = db_operations.explain_query_prefix(
+        explain_query = self.db_operations.explain_query_prefix(
             self.explain_info.format, **self.explain_info.options
         )
         explain_query = f'{explain_query} {sql}'
@@ -117,19 +128,19 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         try:
             raw_explain = self.__execute(explain_query, params, many)
         except Exception as exc:
-            print('Что-то пошло не так:', exc)
+            print('Something went wrong:', exc)
             return None
         else:
             return '\n'.join(self.format_explain(raw_explain))
 
     def __execute(self, explain_query: str, params: tuple[Any, ...], many: bool) -> Explain:
         with self.connection.cursor() as cursor:
-            # нельзя вызывать execute или executemany
-            # который вызывает внутри себя обёртку,
-            # потому что это приведёт к дублированию вызова,
-            # и вызовет __call__ текущей обёртки
+            # you cannot call execute or executemany
+            # which invokes a wrapper inside itself,
+            # because it will result in duplicate call,
+            # and will call __call__ of the current wrapper
 
-            # данные запросы идут в обход обёрток
+            # these requests bypass wrappers
             if many:
                 cursor._executemany(explain_query, params)
             else:
@@ -139,8 +150,7 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
 
     def build_explain_info(self, *, format: str | None = None, **options: dict[str, Any]) -> ExplainInfo:  # noqa: A002
         """
-        Runs an EXPLAIN on the SQL query this QuerySet would perform, and
-        returns the results.
+        Validates explain options and build ExplainInfo object.
         """
         for option_name in options:
             if not self.EXPLAIN_OPTIONS_PATTERN.fullmatch(option_name) or '--' in option_name:
@@ -148,6 +158,9 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         return self.ExplainInfo(format, options)
 
     def format_explain(self, result: Explain) -> Generator[str, None, None]:
+        """
+        Splits the explain tuple into its components and collects the final explain string from them.
+        """
         nested_result = [list(result)]
         # Some backends return 1 item tuples with strings, and others return
         # tuples with integers and strings. Flatten them out into strings.
