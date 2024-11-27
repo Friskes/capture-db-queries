@@ -293,21 +293,21 @@ class TestContextManagerCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
     def call_capture_queries(self, **kwargs: Any) -> CaptureQueries:
         with slow_down_execute(0.1):  # noqa: SIM117
             with CaptureQueries(**kwargs) as obj:
-                obj.current_iteration = 1  # XXX(Ars): A temporary hack only for tests, reworked later
                 _select(self.reporter.pk, self.article.pk)
         return obj
 
     # @pytest.mark.filterwarnings("ignore::UserWarning")  # warn not show, and not raise exc
     # @pytest.mark.filterwarnings('default::UserWarning')  # warn show, and not raise exc
     def test_param__number_runs(self) -> None:
-        with pytest.raises(
+        with pytest.raises(  # noqa: SIM117
             UserWarning,
             match=(
                 'When using: CaptureQueries as a context manager,'
                 ' the number_runs > 1 parameter is not used.'
             ),
         ):
-            self.call_capture_queries(number_runs=3)
+            with CaptureQueries(number_runs=3):
+                pass
 
     def test_execute_raw_sql(self) -> None:
         reporter_raw_sql = (

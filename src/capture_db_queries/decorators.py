@@ -128,6 +128,7 @@ class AbcCapture(abc.ABC):
         if exc_type is not None:
             return
 
+        self.current_iteration += 1
         queries_count = len(self)
         self.printer.print_single_sql(
             SinglePrintDTO(
