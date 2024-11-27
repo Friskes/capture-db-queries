@@ -31,7 +31,7 @@ classifiers = [
 ]
 # pip install .
 dependencies = [
-    "django>=3.2.9",
+    "django>=3.2.25",
     "sqlparse==0.4.2",
     "pygments==2.18.0",
 ]
