@@ -26,11 +26,15 @@ class SeveralPrintDTO(BasePrintDTO):
 
     @property
     def sum_all_execution_times(self) -> float:
-        return sum(self.all_execution_times)
+        if self.all_execution_times:
+            return sum(self.all_execution_times)
+        return 0.0
 
     @property
     def median_all_execution_times(self) -> float:
-        return statistics.median(self.all_execution_times)
+        if self.all_execution_times:
+            return statistics.median(self.all_execution_times)
+        return 0.0
 
 
 @dataclass(frozen=True)
