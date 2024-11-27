@@ -1,4 +1,4 @@
-# Class that supports the function of decorator, iterator and context manager for measuring the time and number of database queries
+# Class to simplify the search for slow and suboptimal sql queries to the database in django projects.
 
 <div align="center">
 
@@ -11,7 +11,12 @@
 
 </div>
 
-> Class that supports the function of decorator, iterator and context manager for measuring the time and number of database queries
+## About class
+- Class allows you to track any sql queries that are executed inside the body of a loop, a decorated function, or a context manager, the body can be executed a specified number of times to get the average query execution time.
+
+- The class allows you to display formatted output data containing brief information about the current iteration of the measurement, display sql queries and explain information on them, as well as summary information containing data on all measurements.
+
+> **Do not use the class inside the business logic of your application, this will greatly slow down the execution of the queries, the class is intended only for the test environment.**
 
 ## Install
 1. Install package
@@ -19,47 +24,60 @@
     pip install capture-db-queries
     ```
 
-## About decorator
-`CaptureQueries` class as decorator can call the body of the decorated function or class as iterator can run code inside for loop the specified number of times for multiple measurements, it can validate the total number of queries.
-The functionality of the classic context manager is also available.
+## About class parameters
+> *All parameters are purely optional.*
 
 - Optional parameters:
-    - `assert_q_count`: The expected number of database requests is otherwise "AssertionError: N not less than or equal to N queries"
-    - `number_runs`: The number of runs of the test function / test for loop
-    - `verbose`: Displaying the final results of the test measurements
-    - `advanced_verb`: Displaying the result of each test measurement
-    - `auto_call_func`: Autorun of the decorated function (without arguments)
-    - `queries`: Displaying raw SQL queries to the database
-    - `explain`: Displaying additional information about each request (has no effect on the orig. requests)
-    - `explain_opts`: For more information about the parameters for explain, see the documentation for your DBMS
+    - `assert_q_count`: The expected number of database queries during all `number_runs`, otherwise an exception will be raised: **"AssertionError: `N` not less than or equal to `N` queries"**.
+    - `number_runs`: The number of runs of the decorated function or test for loop.
+    - `verbose`: Displaying the final results of test measurements within all `number_runs`.
+    - `advanced_verb`: Displaying the result of each test measurement.
+    - `auto_call_func`: Autorun of the decorated function. *(without passing arguments to the function, since the launch takes place inside the class)*.
+    - `queries`: Displaying colored and formatted SQL queries to the database.
+    - `explain`: Displaying explain information about each query. (has no effect on the original query).
+    - `explain_opts`: Parameters for explain. *(for more information about the parameters for explain, see the documentation for your DBMS).*
     - `connection`: Connecting to your database, by default: django.db.connection
 
 ## Usage examples
 
 ```python
-from capture_db_queries.decorators import CaptureQueries
+from capture_db_queries import CaptureQueries
+```
 
+```python
 for ctx in CaptureQueries(number_runs=2, advanced_verb=True):
-    response = self.client.get(url)
-
-# OR
-
-@CaptureQueries(number_runs=2, advanced_verb=True)
-def test_request():
-    response = self.client.get(url)
-
-# OR
-
-# NOTE: The with context manager does not support multi-launch number_runs > 1
-with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
     response = self.client.get(url)
 
 >>> Test №1 | Queries count: 10 | Execution time: 0.04s
 >>> Test №2 | Queries count: 10 | Execution time: 0.04s
 >>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
+```
 
-# Example of output when using queries and explain:
+#### OR
 
+```python
+@CaptureQueries(number_runs=2, advanced_verb=True)
+def test_request():
+    response = self.client.get(url)
+
+>>> Test №1 | Queries count: 10 | Execution time: 0.04s
+>>> Test №2 | Queries count: 10 | Execution time: 0.04s
+>>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
+```
+
+#### OR
+
+```python
+# NOTE: The with context manager does not support multi-launch number_runs > 1
+with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
+    response = self.client.get(url)
+
+>>> Queries count: 10  |  Execution time: 0.04s  |  Vendor: sqlite
+```
+
+> ### Example of output when using queries and explain:
+
+```python
 for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
     list(Reporter.objects.filter(pk=1))
     list(Article.objects.filter(pk=1))
@@ -71,7 +89,7 @@ for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
 >>> SELECT "tests_reporter"."id",
 >>>     "tests_reporter"."full_name"
 >>> FROM "tests_reporter"
->>> WHERE "tests_reporter"."id" = %s
+>>> WHERE "tests_reporter"."id" = 1
 >>>
 >>>
 >>> №[2] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_article USING INTEGER PRIMARY KEY (rowid=?)']
@@ -81,7 +99,7 @@ for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
 >>>     "tests_article"."content",
 >>>     "tests_article"."reporter_id"
 >>> FROM "tests_article"
->>> WHERE "tests_article"."id" = %s
+>>> WHERE "tests_article"."id" = 1
 >>>
 >>>
 >>> Tests count: 1  |  Total queries count: 2  |  Total execution time: 0.22s  |  Median time one test is: 0.109s  |  Vendor: sqlite

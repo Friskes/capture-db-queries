@@ -214,34 +214,70 @@ class AbcCapture(abc.ABC):
 
 class CaptureQueries(AbcCapture):
     """
-    Measures the number of database requests and
-    displays detailed information about the measurements,
-    validates the number of requests.
+    #### Class to simplify the search for slow and suboptimal sql queries\
+    to the database in django projects.
 
     ---
 
-    UseCases::
+    #### About class
+    - Class allows you to track any sql queries that are executed inside the body of a loop,
+    a decorated function, or a context manager,
+    the body can be executed a specified number of times to get the average query execution time.
+
+    - The class allows you to display formatted output data
+    containing brief information about the current iteration of the measurement,
+    display sql queries and explain information on them,
+    as well as summary information containing data on all measurements.
+
+    `Do not use the class inside the business logic of your application,
+    this will greatly slow down the execution of the queries,
+    the class is intended only for the test environment.`
+
+    ---
+
+    #### - Optional parameters:
+        - `assert_q_count`: The expected number of database queries during all `number_runs`, otherwise an exception will be raised: "AssertionError: `N` not less than or equal to `N` queries".
+        - `number_runs`: The number of runs of the decorated function or test for loop.
+        - `verbose`: Displaying the final results of test measurements within all `number_runs`.
+        - `advanced_verb`: Displaying the result of each test measurement.
+        - `auto_call_func`: Autorun of the decorated function. (without passing arguments to the function, since the launch takes place inside the class).
+        - `queries`: Displaying colored and formatted SQL queries to the database.
+        - `explain`: Displaying explain information about each query. (has no effect on the original query).
+        - `explain_opts`: Parameters for explain. (for more information about the parameters for explain, see the documentation for your DBMS).
+        - `connection`: Connecting to your database, by default: django.db.connection
+
+    ---
+
+    #### Usage examples::
 
         for ctx in CaptureQueries(number_runs=2, advanced_verb=True):
-            response = self.client.get(url)
-
-        OR
-
-        @CaptureQueries(number_runs=2, advanced_verb=True)
-        def test_request():
-            response = self.client.get(url)
-
-        OR
-
-        # NOTE: The with context manager does not support multi-launch number_runs > 1
-        with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
             response = self.client.get(url)
 
         >>> Test №1 | Queries count: 10 | Execution time: 0.04s
         >>> Test №2 | Queries count: 10 | Execution time: 0.04s
         >>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
 
-        # Example of output when using queries and explain parameters:
+        # OR
+
+        @CaptureQueries(number_runs=2, advanced_verb=True)
+        def test_request():
+            response = self.client.get(url)
+
+        >>> Test №1 | Queries count: 10 | Execution time: 0.04s
+        >>> Test №2 | Queries count: 10 | Execution time: 0.04s
+        >>> Tests count: 2  |  Total queries count: 20  |  Total execution time: 0.08s  |  Median time one test is: 0.041s  |  Vendor: sqlite
+
+        # OR
+
+        # NOTE: The with context manager does not support multi-launch number_runs > 1
+        with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
+            response = self.client.get(url)
+
+        >>> Queries count: 10  |  Execution time: 0.04s  |  Vendor: sqlite
+
+    ---
+
+    #### Example of output when using queries and explain::
 
         for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
             list(Reporter.objects.filter(pk=1))
@@ -254,7 +290,7 @@ class CaptureQueries(AbcCapture):
         >>> SELECT "tests_reporter"."id",
         >>>     "tests_reporter"."full_name"
         >>> FROM "tests_reporter"
-        >>> WHERE "tests_reporter"."id" = %s
+        >>> WHERE "tests_reporter"."id" = 1
         >>>
         >>>
         >>> №[2] time=[0.109] explain=['2 0 0 SEARCH TABLE tests_article USING INTEGER PRIMARY KEY (rowid=?)']
@@ -264,33 +300,10 @@ class CaptureQueries(AbcCapture):
         >>>     "tests_article"."content",
         >>>     "tests_article"."reporter_id"
         >>> FROM "tests_article"
-        >>> WHERE "tests_article"."id" = %s
+        >>> WHERE "tests_article"."id" = 1
         >>>
         >>>
         >>> Tests count: 1  |  Total queries count: 2  |  Total execution time: 0.22s  |  Median time one test is: 0.109s  |  Vendor: sqlite
-
-    ---
-
-    - assert_q_count: The expected number of database requests otherwise an
-     "AssertionError: N not less than or equal to N queries"
-    - number_runs: The number of runs of the test function / test cycle
-    - verbose: Displaying the final results of the test measurements
-    - advanced_verb: Displaying the result of each test measurement
-    - auto_call_func: Autorun of the decorated function (without arguments)
-    - queries: Displaying raw SQL queries to the database
-    - explain: Displaying additional information about each request (has no effect on the orig. requests)
-    - explain_opts: Parameters for explain, find out more in the documentation for your DBMS
-    - connection: Connecting to your database, by default: django.db.connection
-
-    ---
-
-    Tests count: Total number of test measurements
-    Total queries count: The total number of database requests
-     within the test function within all measurements
-    Total execution time: Total time for executing database queries
-     inside the test function within all measurements
-    Median time one test is: Average execution time of one test measurement
-    Vendor: The database under test
     """  # noqa: E501
 
     def _assert_queries_count(self, queries_count: int) -> None:
