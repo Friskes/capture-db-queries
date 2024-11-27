@@ -4,8 +4,7 @@
 
 build/
 dist/
-venv/
-.venv/
+*venv/
 *.egg-info/
 
 !.gitignore
