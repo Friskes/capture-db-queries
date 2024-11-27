@@ -12,7 +12,7 @@ import django
 import pytest
 from django.conf import settings
 from django.db.backends.utils import CursorWrapper
-from src import capture_db_queries
+from src.capture_db_queries._logging import switch_logger, switch_trace  # noqa: F401
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -58,9 +58,11 @@ def _ignore_deprecation() -> Generator[None, None, None]:
 
 @pytest.fixture
 def _debug_true() -> Generator[None, None, None]:
-    capture_db_queries.decorators._DEBUG = True
+    switch_logger(True)
+    # switch_trace(True)
     yield
-    capture_db_queries.decorators._DEBUG = False
+    switch_logger(False)
+    # switch_trace(False)
 
 
 @contextmanager
@@ -90,3 +92,11 @@ def slow_down_execute(seconds: float = 0.1) -> Generator[None, None, None]:
     with patch('django.db.backends.utils.CursorWrapper._execute', new=slow_execute):  # noqa: SIM117
         with patch('django.db.backends.utils.CursorWrapper._executemany', new=slow_executemany):
             yield
+
+
+@contextmanager
+def skip_colorize_sql() -> Generator[None, None, None]:
+    with patch(
+        'src.capture_db_queries.printers.PrinterSql.colorize_sql', new=lambda _, queries_log: queries_log
+    ):
+        yield
