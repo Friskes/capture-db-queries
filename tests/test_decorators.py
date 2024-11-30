@@ -49,7 +49,7 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
     def call_capture_queries(self, **kwargs: Any) -> CaptureQueries:
         raise NotImplementedError
 
-    # @pytest.mark.usefixtures('_debug_true')
+    # @pytest.mark.usefixtures('debug_true')
     def test_basic_logic(self) -> None:
         obj = self.call_capture_queries()
 
@@ -164,7 +164,7 @@ class TestLoopCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
                 _select(self.reporter.pk, self.article.pk)
         return obj
 
-    # @pytest.mark.usefixtures('_debug_true')
+    # @pytest.mark.usefixtures('debug_true')
     def test_param__number_runs(self) -> None:
         obj = self.call_capture_queries(number_runs=3)
 
@@ -338,7 +338,7 @@ class TestContextManagerCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
 class TestOutputCaptureQueries:
     """The -s argument must be passed when running py test to output output"""
 
-    # @pytest.mark.usefixtures('_debug_true')
+    # @pytest.mark.usefixtures('debug_true')
     def test_capture_queries_loop(self, intercept_output: StringIO) -> None:
         date_now = timezone.now().date()
 
@@ -352,7 +352,7 @@ class TestOutputCaptureQueries:
             output,
         ), f'incorrect output = {output}'
 
-    # @pytest.mark.usefixtures('_debug_true')
+    # @pytest.mark.usefixtures('debug_true')
     def test_capture_queries_decorator(self, intercept_output: StringIO) -> None:
         date_now = timezone.now().date()
 
@@ -367,7 +367,7 @@ class TestOutputCaptureQueries:
             output,
         ), f'incorrect output = {output}'
 
-    # @pytest.mark.usefixtures('_debug_true')
+    # @pytest.mark.usefixtures('debug_true')
     def test_capture_queries_context_manager(self, intercept_output: StringIO) -> None:
         with CaptureQueries() as ctx:  # noqa: F841
             request_to_db()
@@ -381,7 +381,7 @@ class TestOutputCaptureQueries:
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.usefixtures('_ignore_deprecation')
+@pytest.mark.usefixtures('ignore_deprecation')
 def test_capture_queries(intercept_output: StringIO) -> None:
     """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
 
@@ -398,7 +398,7 @@ def test_capture_queries(intercept_output: StringIO) -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.usefixtures('_ignore_deprecation')
+@pytest.mark.usefixtures('ignore_deprecation')
 def test_capture_queries_with_advanced_verb_and_queries(intercept_output: StringIO) -> None:
     """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
 
@@ -433,7 +433,7 @@ def test_capture_queries_with_advanced_verb_and_queries(intercept_output: String
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.usefixtures('_ignore_deprecation')
+@pytest.mark.usefixtures('ignore_deprecation')
 def test_ext_capture_queries_context(intercept_output: StringIO) -> None:
     """Обязательно должен быть передан аргумент -s при запуске pytest, для вывода output"""
 

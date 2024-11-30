@@ -50,14 +50,14 @@ def intercept_output() -> Generator[StringIO, None, None]:
 
 
 @pytest.fixture
-def _ignore_deprecation() -> Generator[None, None, None]:
+def ignore_deprecation() -> Generator[None, None, None]:
     warnings.simplefilter('ignore', DeprecationWarning)
     yield
     warnings.resetwarnings()
 
 
 @pytest.fixture
-def _debug_true() -> Generator[None, None, None]:
+def debug_true() -> Generator[None, None, None]:
     switch_logger(True)
     # switch_trace(True)
     yield

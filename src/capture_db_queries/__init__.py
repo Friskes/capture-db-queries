@@ -1,3 +1,4 @@
+import sys
 import warnings
 
 warnings.filterwarnings(
@@ -6,6 +7,8 @@ warnings.filterwarnings(
     category=DeprecationWarning,
 )
 
-from . import _sqlite3_adapters_and_converters  # noqa: F401, E402
+if sys.version_info >= (3, 12):
+    from . import _sqlite3_adapters_and_converters  # noqa: F401
+
 from ._logging import switch_logger, switch_trace  # noqa: F401, E402
 from .decorators import CaptureQueries, ExtCaptureQueriesContext, capture_queries  # noqa: F401, E402
