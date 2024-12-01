@@ -4,7 +4,9 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from src.capture_db_queries.dtos import IterationPrintDTO, SeveralPrintDTO, SinglePrintDTO
+from src.capture_db_queries import settings
+from src.capture_db_queries.dtos import IterationPrintDTO, Query, SeveralPrintDTO, SinglePrintDTO
+from src.capture_db_queries.handlers import IHandler
 from src.capture_db_queries.printers import PrinterSql
 
 from tests.conftest import intercept_output_ctx, skip_colorize_sql
@@ -13,6 +15,13 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from src.capture_db_queries.types import QueriesLog
+
+
+class CustomHandler(IHandler):
+    def handle(self, queries_log: QueriesLog) -> QueriesLog:
+        for query in queries_log:
+            query.sql = 'Hello World!'
+        return queries_log
 
 
 @pytest.mark.django_db(transaction=True)
@@ -25,24 +34,26 @@ class TestPrinter:
 
         queries_log: QueriesLog = deque(
             [
-                {
-                    'sql': 'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
+                Query(
+                    sql='SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
                     'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s',
-                    'time': 0.09399999992456287,
-                },
-                {
-                    'sql': 'SELECT "tests_article"."id", "tests_article"."pub_date", '
-                    '"tests_article"."headline", "tests_article"."content", "tests_article"."reporter_id" '  # noqa: E501
+                    time=0.09399999992456287,
+                ),
+                Query(
+                    sql='SELECT "tests_article"."id", "tests_article"."pub_date", '
+                    '"tests_article"."headline", "tests_article"."content", '
+                    '"tests_article"."reporter_id" '
                     'FROM "tests_article" WHERE "tests_article"."id" = %s',
-                    'time': 0.10900000005494803,
-                },
+                    time=0.10900000005494803,
+                ),
             ],
             maxlen=9000,
         )
         self.queries_log_output = (
             '\n\n№[1] time=[0.094000]\nSELECT "tests_reporter"."id",\n       '
             '"tests_reporter"."full_name"\n  FROM "tests_reporter"\n '
-            'WHERE "tests_reporter"."id" = %s\n\n\n№[2] time=[0.109000]\nSELECT "tests_article"."id",\n       '  # noqa: E501
+            'WHERE "tests_reporter"."id" = %s\n\n\n№[2] time=[0.109000]'
+            '\nSELECT "tests_article"."id",\n       '
             '"tests_article"."pub_date",\n       '
             '"tests_article"."headline",\n       '
             '"tests_article"."content",\n       '
@@ -58,6 +69,9 @@ class TestPrinter:
         self.several_output = (
             '\n\nTests count: 1  |  Total queries count: 2  |  Total execution time: 1.48633s  |  '
             'Median time one test is: 0.743167s  |  Vendor: fake_vendor\n\n'
+        )
+        self.custom_handler_output = (
+            '\n\n№[1] time=[0.094000]\nHello World!\n\n\n№[2] time=[0.109000]\nHello World!\n\n\n'
         )
 
         self.iter_dto = IterationPrintDTO(
@@ -168,3 +182,16 @@ class TestPrinter:
             obj.print_several_sql(self.several_dto)
             output = ctx.getvalue()
             assert output == self.queries_log_output, repr(output)
+
+    def test_custom_handler_impl(self) -> None:
+        settings.PRINTER_HANDLERS.append('tests.test_printers.CustomHandler')
+
+        with intercept_output_ctx() as ctx:
+            obj = self.build_printer(
+                vendor='fake_vendor', verbose=False, advanced_verb=False, queries=True
+            )
+            obj.print_several_sql(self.several_dto)
+            output = ctx.getvalue()
+            assert output == self.custom_handler_output, repr(output)
+
+        settings.PRINTER_HANDLERS.remove('tests.test_printers.CustomHandler')

@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from .types import QueriesLog
 
 
+@dataclass
+class Query:
+    sql: str
+    time: float
+
+
+@dataclass
+class ExpQuery(Query):
+    explain: str
+
+
 @dataclass(frozen=True)
 class BasePrintDTO:
     queries_count: int

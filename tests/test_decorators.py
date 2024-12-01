@@ -66,30 +66,30 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
         gt, lt = 0.08, 0.13
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
-        data = obj.queries_log[0]['time']
+        data = obj.wrapper.queries_log[0].time
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
-        data = obj.queries_log[1]['time']
+        data = obj.wrapper.queries_log[1].time
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
-        data = obj.queries_log[0]['sql']
-        assert obj.queries_log[0]['sql'] == (
+        data = obj.wrapper.queries_log[0].sql
+        assert obj.wrapper.queries_log[0].sql == (
             'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
             'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
         ), data
 
-        data = obj.queries_log[1]['sql']
-        assert obj.queries_log[1]['sql'] == (
+        data = obj.wrapper.queries_log[1].sql
+        assert obj.wrapper.queries_log[1].sql == (
             'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
             '"tests_article"."content", "tests_article"."reporter_id" '
             'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
         ), data
 
-        with pytest.raises(KeyError, match='explain'):
-            obj.queries_log[0]['explain']
+        with pytest.raises(AttributeError, match='explain'):
+            obj.wrapper.queries_log[0].explain  # noqa: B018
 
-        with pytest.raises(KeyError, match='explain'):
-            obj.queries_log[1]['explain']
+        with pytest.raises(AttributeError, match='explain'):
+            obj.wrapper.queries_log[1].explain  # noqa: B018
 
     def test_param__assert_q_count(self) -> None:
         with pytest.raises(AssertionError, match='2 not less than or equal to 1 queries'):
@@ -102,29 +102,29 @@ class BasicTestsFor3ChoicesOfCaptureQueries:
 
         gt, lt = 0.08, 0.13
 
-        data = obj.queries_log[0]['time']
+        data = obj.wrapper.queries_log[0].time
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
-        data = obj.queries_log[1]['time']
+        data = obj.wrapper.queries_log[1].time
         assert gt < data < lt, f'{gt} < {data} < {lt}'
 
-        data = obj.queries_log[0]['sql']
+        data = obj.wrapper.queries_log[0].sql
         assert data == (
             'SELECT "tests_reporter"."id", "tests_reporter"."full_name" '
             'FROM "tests_reporter" WHERE "tests_reporter"."id" = %s' % self.reporter.pk
         ), data
 
-        data = obj.queries_log[1]['sql']
+        data = obj.wrapper.queries_log[1].sql
         assert data == (
             'SELECT "tests_article"."id", "tests_article"."pub_date", "tests_article"."headline", '
             '"tests_article"."content", "tests_article"."reporter_id" '
             'FROM "tests_article" WHERE "tests_article"."id" = %s' % self.article.pk
         ), data
 
-        # data = obj.queries_log[0]['explain']
+        # data = obj.wrapper.queries_log[0].explain
         # assert data == '2 0 0 SEARCH TABLE tests_reporter USING INTEGER PRIMARY KEY (rowid=?)', data
 
-        # data = obj.queries_log[1]['explain']
+        # data = obj.wrapper.queries_log[1].explain
         # assert data == '2 0 0 SEARCH TABLE tests_article USING INTEGER PRIMARY KEY (rowid=?)', data
 
     # def test_param__explain_opts(self) -> None:
@@ -194,10 +194,10 @@ class TestLoopCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
             list(Reporter.objects.raw(reporter_raw_sql))
             list(Article.objects.raw(article_raw_sql))
 
-        data = obj.queries_log[0]['sql']
+        data = obj.wrapper.queries_log[0].sql
         assert data == (reporter_raw_sql), data
 
-        data = obj.queries_log[1]['sql']
+        data = obj.wrapper.queries_log[1].sql
         assert data == (article_raw_sql), data
 
     def test_without_requests(self) -> None:
@@ -274,10 +274,10 @@ class TestDecoratorCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
             list(Reporter.objects.raw(reporter_raw_sql))
             list(Article.objects.raw(article_raw_sql))
 
-        data = obj.queries_log[0]['sql']
+        data = obj.wrapper.queries_log[0].sql
         assert data == (reporter_raw_sql), data
 
-        data = obj.queries_log[1]['sql']
+        data = obj.wrapper.queries_log[1].sql
         assert data == (article_raw_sql), data
 
     def test_without_requests(self) -> None:
@@ -323,10 +323,10 @@ class TestContextManagerCaptureQueries(BasicTestsFor3ChoicesOfCaptureQueries):
             list(Reporter.objects.raw(reporter_raw_sql))
             list(Article.objects.raw(article_raw_sql))
 
-        data = obj.queries_log[0]['sql']
+        data = obj.wrapper.queries_log[0].sql
         assert data == (reporter_raw_sql), data
 
-        data = obj.queries_log[1]['sql']
+        data = obj.wrapper.queries_log[1].sql
         assert data == (article_raw_sql), data
 
     def test_without_requests(self) -> None:

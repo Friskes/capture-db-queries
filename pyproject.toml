@@ -114,6 +114,7 @@ disable_error_code = [
     "operator",
     "assignment",
     "union-attr",
+    "comparison-overlap",
 ]
 
 
@@ -204,6 +205,7 @@ ignore = [
     "F403",    # (не ругаться на использование from ... import *)
     # https://docs.astral.sh/ruff/rules/#pyupgrade-up
     "UP031",   # (не ругаться на форматирование с помощью %s)
+    "UP035",   # (не ругаться на импорт из typing_extensions)
     "UP036",   # (не ругаться на использование sys.version_info если текущая версия не подпадает под условие)
     # https://docs.astral.sh/ruff/rules/#flake8-logging-format-g
     "G004",    # (не ругаться на использование f-строк для сообщения лога)

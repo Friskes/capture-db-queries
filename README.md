@@ -104,3 +104,23 @@ for _ in CaptureQueries(advanced_verb=True, queries=True, explain=True):
 >>>
 >>> Tests count: 1  |  Total queries count: 2  |  Total execution time: 0.22s  |  Median time one test is: 0.109s  |  Vendor: sqlite
 ```
+
+### Customization of the display
+> To customize the display of SQL queries, you can import a list with handlers and remove handlers from it or expand it with your own handlers.
+
+```python
+from capture_db_queries import settings, IHandler
+
+# NOTE: The handler must comply with the specified interface.
+class SomeHandler(IHandler):
+    def handle(self, queries_log):
+        for query in queries_log:
+            query.sql = "Hello World!"
+        return queries_log
+
+settings.PRINTER_HANDLERS.remove("capture_db_queries.handlers.ColorizeSqlHandler")
+settings.PRINTER_HANDLERS.append("path.to.your.handler.SomeHandler")
+```
+
+## TODO:
+1. Add support for other ORM's, SQLAlchemy, etc.

@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import time
 import traceback
+from collections import deque
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.utils.regex_helper import _lazy_re_compile
 
 from ._logging import log
+from .dtos import ExpQuery, Query
 from .timers import ContextTimer
 
 if TYPE_CHECKING:
@@ -17,17 +20,15 @@ if TYPE_CHECKING:
     from django.db.backends.base.operations import BaseDatabaseOperations
     from django.db.backends.utils import CursorWrapper
 
-    from .types import Explain, QueriesLog, Query
+    from .types import Explain, QueryDataT
 
 
 class BaseExecutionWrapper:
-    def __init__(
-        self, connection: BaseDatabaseWrapper, queries_log: QueriesLog, *args: Any, **kwargs: Any
-    ) -> None:
+    def __init__(self, connection: BaseDatabaseWrapper, *args: Any, **kwargs: Any) -> None:
         log.debug('')
 
         self.connection = connection
-        self.queries_log = queries_log
+        self.queries_log: deque[Query | ExpQuery] = deque(maxlen=self.connection.queries_limit)
         self.timer = ContextTimer(time.perf_counter)
 
         # Wrappers for specific databases are stored at addresses:
@@ -57,16 +58,25 @@ class BaseExecutionWrapper:
             # Get filled SQL with params
             sql = self.db_operations.last_executed_query(context['cursor'], sql, params)
 
-        query: Query = {'sql': sql, 'time': timer.execution_time}
-        query = self.update_query(query)
+        query_data: QueryDataT = {'sql': sql, 'time': timer.execution_time}
+        query: Query | ExpQuery = self.update_query(query_data)
         self.queries_log.append(query)
 
         log.trace('Location of SQL Call:\n%s', ''.join(traceback.format_stack()))
 
         return result
 
-    def update_query(self, query: Query) -> Query:
-        return query
+    @contextmanager
+    def wrap_reqs_in_wrapper(self) -> Generator[None, None, CursorWrapper]:
+        """Wraps all database requests in a wrapper."""
+        log.debug('')
+
+        # https://docs.djangoproject.com/en/5.1/topics/db/instrumentation/#connection-execute-wrapper
+        with self.connection.execute_wrapper(self):
+            yield
+
+    def update_query(self, query_data: QueryDataT) -> Query:
+        return Query(**query_data)
 
 
 class ExplainExecutionWrapper(BaseExecutionWrapper):
@@ -91,12 +101,11 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
     def __init__(
         self,
         connection: BaseDatabaseWrapper,
-        queries_log: QueriesLog,
         explain_opts: dict[str, Any],
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        super().__init__(connection, queries_log, *args, **kwargs)
+        super().__init__(connection, *args, **kwargs)
         self.explain_info = self.build_explain_info(**explain_opts)
 
     def __call__(
@@ -107,18 +116,16 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         many: bool,
         context: dict[str, Any],
     ) -> CursorWrapper | None:
-        self.__explain = self._execute_explain(sql, params, many)
+        self.explain_data = self._execute_explain(sql, params, many)
         return super().__call__(execute, sql, params, many, context)
 
-    def update_query(self, query: Query) -> Query:
-        if self.__explain is not None:
-            query.update({'explain': self.__explain})
-        return query
+    def update_query(self, query_data: QueryDataT) -> ExpQuery:
+        return ExpQuery(**query_data, explain=self.explain_data)
 
-    def _execute_explain(self, sql: str, params: tuple[Any, ...], many: bool) -> str | None:
+    def _execute_explain(self, sql: str, params: tuple[Any, ...], many: bool) -> str:
         # Checking whether the request is a SELECT request
         if not sql.strip().lower().startswith('select'):
-            return None
+            return ''
 
         explain_query = self.db_operations.explain_query_prefix(
             self.explain_info.format, **self.explain_info.options
@@ -126,14 +133,14 @@ class ExplainExecutionWrapper(BaseExecutionWrapper):
         explain_query = f'{explain_query} {sql}'
 
         try:
-            raw_explain = self.__execute(explain_query, params, many)
+            raw_explain = self.__execute_explain(explain_query, params, many)
         except Exception as exc:
             print('Something went wrong:', exc)
-            return None
+            return ''
         else:
             return '\n'.join(self.format_explain(raw_explain))
 
-    def __execute(self, explain_query: str, params: tuple[Any, ...], many: bool) -> Explain:
+    def __execute_explain(self, explain_query: str, params: tuple[Any, ...], many: bool) -> Explain:
         with self.connection.cursor() as cursor:
             # you cannot call execute or executemany
             # which invokes a wrapper inside itself,

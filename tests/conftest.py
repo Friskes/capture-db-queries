@@ -12,6 +12,7 @@ import django
 import pytest
 from django.conf import settings
 from django.db.backends.utils import CursorWrapper
+from src.capture_db_queries import settings as self_settings
 from src.capture_db_queries._logging import switch_logger, switch_trace  # noqa: F401
 
 if TYPE_CHECKING:
@@ -29,6 +30,9 @@ def pytest_configure(config: pytest.Config) -> None:
         },
     )
     django.setup()
+
+    for i, handler_path in enumerate(self_settings.PRINTER_HANDLERS):
+        self_settings.PRINTER_HANDLERS[i] = f'src.{handler_path}'
 
 
 @contextmanager
@@ -96,7 +100,7 @@ def slow_down_execute(seconds: float = 0.1) -> Generator[None, None, None]:
 
 @contextmanager
 def skip_colorize_sql() -> Generator[None, None, None]:
-    with patch(
-        'src.capture_db_queries.printers.PrinterSql.colorize_sql', new=lambda _, queries_log: queries_log
-    ):
-        yield
+    removed_handler_path = 'src.capture_db_queries.handlers.ColorizeSqlHandler'
+    self_settings.PRINTER_HANDLERS.remove(removed_handler_path)
+    yield
+    self_settings.PRINTER_HANDLERS.insert(2, removed_handler_path)
