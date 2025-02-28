@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    if '-s' not in sys.argv:
+        raise ValueError('The -s flag is required to run tests.')
+
     settings.configure(
         INSTALLED_APPS=('tests',),
         DATABASES={
