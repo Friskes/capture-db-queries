@@ -179,16 +179,15 @@ class CaptureQueries:
             return ExplainExecutionWrapper
         return BaseExecutionWrapper
 
-    async def __aenter__(self):
-        await sync_to_async(self.__enter__)()
-        return self
+    async def __aenter__(self) -> Self:
+        return await sync_to_async(self.__enter__)()
 
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         traceback: TracebackType | None,
-    ):
+    ) -> None:
         await sync_to_async(self.__exit__)(exc_type, exc_value, traceback)
 
     def __enter__(self) -> Self:

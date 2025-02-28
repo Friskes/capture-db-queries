@@ -69,6 +69,7 @@ def test_request():
 
 ```python
 # NOTE: The with context manager does not support multi-launch number_runs > 1
+# NOTE: Also you can use `async with` if you capture queries in async context.
 with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
     response = self.client.get(url)
 
@@ -123,4 +124,5 @@ settings.PRINTER_HANDLERS.append("path.to.your.handler.SomeHandler")
 ```
 
 ## TODO:
-1. Add support for other ORM's, SQLAlchemy, etc.
+1. Add support for async loop and async func decorator, __acall__, __aiter__, __anext__
+2. Add support for other ORM's, SQLAlchemy, etc.
