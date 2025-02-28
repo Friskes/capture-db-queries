@@ -207,6 +207,7 @@ ignore = [
     "UP031",   # (не ругаться на форматирование с помощью %s)
     "UP035",   # (не ругаться на импорт из typing_extensions)
     "UP036",   # (не ругаться на использование sys.version_info если текущая версия не подпадает под условие)
+    "UP038",   # (не ругаться на использование кортежа в isinstance или issubclass)
     # https://docs.astral.sh/ruff/rules/#flake8-logging-format-g
     "G004",    # (не ругаться на использование f-строк для сообщения лога)
     # https://docs.astral.sh/ruff/rules/#ruff-specific-rules-ruf
@@ -218,6 +219,7 @@ ignore = [
     "PT009",   # (не ругаться на unittest ассерты)
     "PT027",   # (не ругаться на unittest ассерты)
     "PT001",   # (не ругаться на отсутствие круглых скобок у декоратора fixture)
+    "PT023",   # (не ругаться на отсутствие круглых скобок у декоратора mark.<marker>)
     "PT004",   # (не ругаться на написание фикстур которые ничего не возвращают без префикса "_")
     # https://docs.astral.sh/ruff/rules/#flake8-implicit-str-concat-isc
     "ISC001",  # (конфликт с `COM812`)
