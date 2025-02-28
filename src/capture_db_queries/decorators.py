@@ -8,6 +8,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 from unittest.util import safe_repr
 
+from asgiref.sync import sync_to_async
 from django.core.signals import request_started
 from django.db import (
     connection as db_connection,
@@ -177,6 +178,18 @@ class CaptureQueries:
         if self.explain:
             return ExplainExecutionWrapper
         return BaseExecutionWrapper
+
+    async def __aenter__(self):
+        await sync_to_async(self.__enter__)()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ):
+        await sync_to_async(self.__exit__)(exc_type, exc_value, traceback)
 
     def __enter__(self) -> Self:
         log.debug('')
