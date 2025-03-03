@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 __all__ = ('CaptureQueries', 'capture_queries', 'ExtCaptureQueriesContext')
 
 
-def _detect_pytest_xdist():
+def _detect_pytest_xdist() -> None:
     try:
         is_pytest = sys.argv[0].endswith('pytest')
     except IndexError:
