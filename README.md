@@ -39,7 +39,7 @@
     - `connection`: Connecting to your database, by default: django.db.connection
 
 
-### > WARNING: If you use `pytest-xdist` and run the test with the `-n <workers>` flag, the results will not be reflected in the terminal. Remove the `-n <workers>` flag to display them.
+### > WARNING: If you use `pytest-xdist` and run the test with the `-n <workers>` flag, the results will not be reflected in the terminal. Remove the `-n <workers>` flag to display them or use `--capture=tee-sys -rP` parameters.
 
 
 ## Usage examples
