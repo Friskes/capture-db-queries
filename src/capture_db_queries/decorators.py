@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import statistics
+import sys
 import time
 import warnings
 from functools import wraps
@@ -32,6 +33,24 @@ if TYPE_CHECKING:
     from .types import DecoratedCallable, T
 
 __all__ = ('CaptureQueries', 'capture_queries', 'ExtCaptureQueriesContext')
+
+
+def _detect_pytest_xdist():
+    try:
+        is_pytest = sys.argv[0].endswith('pytest')
+    except IndexError:
+        pass
+    else:
+        is_xdist = '-n' in sys.argv
+        is_spot_test_launch = any('.py::' in arg for arg in sys.argv)
+
+        if is_pytest and is_xdist and is_spot_test_launch:
+            warnings.warn(
+                'If you want to see the result of CaptureQueries, then remove the '
+                '-n <workers> parameter when starting pytest or use --capture=tee-sys -rP parameters.',
+                category=UserWarning,
+                stacklevel=2,
+            )
 
 
 class CaptureQueries:
@@ -70,6 +89,10 @@ class CaptureQueries:
 
     ---
 
+    #### WARNING: If you use `pytest-xdist` and run the test with the `-n <workers>` flag, the results will not be reflected in the terminal. Remove the `-n <workers>` flag to display them.
+
+    ---
+
     #### Usage examples::
 
         for ctx in CaptureQueries(number_runs=2, advanced_verb=True):
@@ -92,6 +115,7 @@ class CaptureQueries:
         # OR
 
         # NOTE: The with context manager does not support multi-launch number_runs > 1
+        # NOTE: Also you can use `async with` if you capture queries in async context.
         with CaptureQueries(number_runs=1, advanced_verb=True) as ctx:
             response = self.client.get(url)
 
@@ -140,6 +164,7 @@ class CaptureQueries:
         explain_opts: dict[str, Any] | None = None,
         connection: BaseDatabaseWrapper | None = None,
     ) -> None:
+        _detect_pytest_xdist()
         log.debug('')
 
         self.assert_q_count = assert_q_count

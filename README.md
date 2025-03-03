@@ -38,6 +38,10 @@
     - `explain_opts`: Parameters for explain. *(for more information about the parameters for explain, see the documentation for your DBMS).*
     - `connection`: Connecting to your database, by default: django.db.connection
 
+
+### > WARNING: If you use `pytest-xdist` and run the test with the `-n <workers>` flag, the results will not be reflected in the terminal. Remove the `-n <workers>` flag to display them.
+
+
 ## Usage examples
 
 ```python
@@ -124,5 +128,5 @@ settings.PRINTER_HANDLERS.append("path.to.your.handler.SomeHandler")
 ```
 
 ## TODO:
-1. Add support for async loop and async func decorator, __acall__, __aiter__, __anext__
+1. Add support for async loop and async func decorator, __call__, __aiter__, __anext__
 2. Add support for other ORM's, SQLAlchemy, etc.
